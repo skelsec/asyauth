@@ -1,0 +1,41 @@
+import enum
+
+class asyauthProtocol(enum.Enum):
+	NONE = 'NONE'
+	SIMPLE = 'SIMPLE'
+	PLAIN = 'PLAIN'
+	SICILY = 'SICILY'
+	NTLM = 'NTLM'
+	KERBEROS = 'KERBEROS'
+	CREDSSP = 'CREDSSP'
+	SPNEGO = 'SPNEGO'
+	SPNEGOEX = 'SPNEGOEX'
+
+class asyauthSubProtocol(enum.Enum):
+	NATIVE = 'NATIVE'
+	SSPI = 'SSPI'
+	WSNET = 'WSNET'
+	SSPIPROXY = 'SSPIPROXY'
+
+class asyauthSecret(enum.Enum):
+	NONE = 'NONE'
+	PASSWORD = 'PASSWORD'
+	PASS = 'PASS'
+	PW = 'PW'
+	PWB64 = 'PWB64'
+	PWPROMPT = 'PWPROMPT'
+	PWHEX = 'PWHEX'
+	LM = 'LM'
+	NT = 'NT'
+	RC4 = 'RC4'
+	AES = 'AES'
+	CCACHE = 'CCACHE'
+	KEYTAB = 'KEYTAB'
+	PFX = 'PFX'
+	PFXSTR = 'PFXSTR'
+	PEM = 'PEM'
+	CERTSTORE = 'CERTSTORE'
+	KIRBI = 'KIRBI'
+	DES = 'DES'
+	TDES = 'TDES'
+	DES3 = 'DES3'
