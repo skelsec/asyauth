@@ -524,10 +524,14 @@ def NTOWFv1(password):
 
 
 def LMOWFv2(Passwd, User, UserDom, PasswdHash = None):
+	if UserDom is None:
+		UserDom = ''
 	return NTOWFv2(Passwd, User, UserDom, PasswdHash)
 
 
 def NTOWFv2(Passwd, User, UserDom, PasswdHash = None):
+	if UserDom is None:
+		UserDom = ''
 	if PasswdHash is not None:
 		fp = hmac.new(PasswdHash, digestmod = 'md5')
 	else:

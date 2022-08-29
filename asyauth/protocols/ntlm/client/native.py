@@ -354,7 +354,8 @@ class NTLMClientNative:
 				else:
 					#comment this out for testing!
 					ti = self.ntlmChallenge.TargetInfo
-					ti[AVPAIRType.MsvAvTargetName] = spn #'TERMSRV/%s' % ti[AVPAIRType.MsvAvDnsComputerName]
+					if spn is not None:
+						ti[AVPAIRType.MsvAvTargetName] = spn #'TERMSRV/%s' % ti[AVPAIRType.MsvAvDnsComputerName]
 					if cb_data is not None:
 						md5_ctx = hashlib.new('md5')
 						md5_ctx.update(cb_data)

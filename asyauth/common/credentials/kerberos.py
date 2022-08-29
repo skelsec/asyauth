@@ -1,3 +1,4 @@
+import copy
 from typing import List
 from asyauth.common.credentials import UniCredential
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol
@@ -10,7 +11,7 @@ from asyauth.utils.paramprocessor import str_one, int_one, bool_one, int_list
 
 
 class KerberosCredential(UniCredential):
-	def __init__(self, secret, username, domain, stype:asyauthSecret, target:UniTarget = None, altname:str = None, altdomain:str = None, etypes:List[int] = [23,17,18], subprotocol:SubProtocol = SubProtocolNative()):
+	def __init__(self, secret, username, domain, stype:asyauthSecret, target:UniTarget = None, altname:str = None, altdomain:str = None, etypes:List[int] = [23,17,18], subprotocol:SubProtocol = SubProtocolNative(), certdata:str = None, keydata:str=None):
 		UniCredential.__init__(
 			self, 
 			secret = secret,
@@ -24,11 +25,18 @@ class KerberosCredential(UniCredential):
 		self.altname = altname
 		self.altdomain = altdomain
 		self.target = target
+		self.certdata = certdata #can be file path or cert data
+		self.keydata = keydata #can be file path or cert data
 
 		self.dh_params = {
 				'p' : int('00ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece65381ffffffffffffffff', 16),
 				'g' : 2
 			}
+
+		if self.domain is None or self.domain == '':
+			raise Exception('Kerberos credential must have domain set!')
+		if self.target is None or self.target.dc_ip is None:
+			raise Exception('Kerberos credential target must have dc_ip set!')
 
 	def get_pkinit(self) -> PKINIT:
 		if self.stype == asyauthSecret.CERTSTORE:
@@ -44,6 +52,8 @@ class KerberosCredential(UniCredential):
 			'etype' : int_list,
 			'dc' : str_one,
 			'dns' : str_one,
+			'certdata':str_one,
+			'keydata':str_one,
 		}
 
 	def to_ccred(self):
@@ -51,6 +61,11 @@ class KerberosCredential(UniCredential):
 			return KCRED.from_keytab(self.secret, self.username, self.domain)
 		if self.stype == asyauthSecret.KIRBI:
 			return KCRED.from_kirbi(self.secret)
+		if self.stype == asyauthSecret.PFXSTR:
+			return KCRED.from_pfx_string(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain)
+		if self.stype == asyauthSecret.PFX:
+			return KCRED.from_pfx_file(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain)
+
 
 		res = KCRED()
 		res.username = self.username
@@ -81,7 +96,7 @@ class KerberosCredential(UniCredential):
 		elif self.stype == asyauthSecret.CCACHE:
 			res.ccache = self.secret
 		else:
-			raise Exception('Missing/unknown stype!')
+			raise Exception('Missing/unknown stype! %s' % self.stype)
 
 		return res
 
