@@ -39,3 +39,4 @@ class asyauthSecret(enum.Enum):
 	DES = 'DES'
 	TDES = 'TDES'
 	DES3 = 'DES3'
+	SSHPRIVKEY = 'SSHPRIVKEY'

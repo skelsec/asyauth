@@ -21,6 +21,7 @@ class UniCredential:
 		return {
 			'timeout' : int_one,
 			'dns' : str_one,
+			'dc' : str_one,
 		}
 
 	@staticmethod
@@ -123,7 +124,7 @@ class UniCredential:
 
 			target = None
 			if extra['dc'] is not None:
-				target = UniTarget(extra['dc'], 88, UniProto.CLIENT_TCP, proxies = proxies, dns=params['dns'])
+				target = UniTarget(extra['dc'], 88, UniProto.CLIENT_TCP, proxies = proxies, dns=params['dns'], dc_ip=extra['dc'])
 
 			etypes = extra['etype'] if extra['etype'] is not None else [23,17,18]
 
