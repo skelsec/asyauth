@@ -1,4 +1,5 @@
 import copy
+from email.mime import base
 from typing import List
 from asyauth.common.credentials import UniCredential
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol
@@ -56,16 +57,27 @@ class KerberosCredential(UniCredential):
 			'keydata':str_one,
 		}
 
-	def to_ccred(self):
-		if self.stype == asyauthSecret.KEYTAB:
-			return KCRED.from_keytab(self.secret, self.username, self.domain)
-		if self.stype == asyauthSecret.KIRBI:
-			return KCRED.from_kirbi(self.secret)
-		if self.stype == asyauthSecret.PFXSTR:
-			return KCRED.from_pfx_string(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain)
-		if self.stype == asyauthSecret.PFX:
-			return KCRED.from_pfx_file(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain)
+	def get_basetype_and_encoding(self):
+		basetype = self.stype
+		encoding = 'file'
+		if self.stype.name.endswith('B64'):
+			basetype = asyauthSecret(self.stype.name[:-3])
+			encoding = 'b64'
+		elif self.stype.name.endswith('HEX'):
+			basetype = asyauthSecret(self.stype.name[:-3])
+			encoding = 'hex'
+		return basetype, encoding
 
+	def to_ccred(self):
+		basetype, encoding = self.get_basetype_and_encoding()
+		if basetype == asyauthSecret.KEYTAB:
+			return KCRED.from_keytab(self.secret, self.username, self.domain, encoding=encoding)
+		if basetype == asyauthSecret.KIRBI:
+			return KCRED.from_kirbi(self.secret, encoding=encoding)
+		if basetype == asyauthSecret.CCACHE:
+			return KCRED.from_ccache(self.secret, self.username, self.domain, encoding=encoding)
+		if basetype == asyauthSecret.PFXSTR:
+			return KCRED.from_pfx(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain, encoding=encoding)
 
 		res = KCRED()
 		res.username = self.username
@@ -93,8 +105,6 @@ class KerberosCredential(UniCredential):
 			if len(self.secret) != 24:
 				raise Exception('Incorrect DES3 key! %s' % self.secret)
 			res.kerberos_key_des3 = self.secret
-		elif self.stype == asyauthSecret.CCACHE:
-			res.ccache = self.secret
 		else:
 			raise Exception('Missing/unknown stype! %s' % self.stype)
 
