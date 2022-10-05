@@ -124,32 +124,35 @@ class SECPKG_CRED(enum.IntFlag):
 
 # https://docs.microsoft.com/en-us/windows/desktop/api/sspi/ns-sspi-_secbuffer
 class SECBUFFER_TYPE(enum.Enum):
-	SECBUFFER_ALERT = 17 #The buffer contains an alert message.
 	SECBUFFER_ATTRMASK = 4026531840 #The buffer contains a bitmask for a SECBUFFER_READONLY_WITH_CHECKSUM buffer.
-	SECBUFFER_CHANNEL_BINDINGS = 14  #	The buffer contains channel binding information.
-	SECBUFFER_CHANGE_PASS_RESPONSE = 15 #The buffer contains a DOMAIN_PASSWORD_INFORMATION structure.
-	SECBUFFER_DATA = 1 #The buffer contains common data. The security package can read and write this data, for example, to encrypt some or all of it.
-	SECBUFFER_DTLS_MTU = 24#The buffer contains the setting for the maximum transmission unit (MTU) size for DTLS only. The default value is 1096 and the valid configurable range is between 200 and 64*1024.
+	
 	SECBUFFER_EMPTY = 0 #This is a placeholder in the buffer array. The caller can supply several such entries in the array, and the security package can return information in them. For more information, see SSPI Context Semantics.
+	SECBUFFER_DATA = 1 #The buffer contains common data. The security package can read and write this data, for example, to encrypt some or all of it.
+	SECBUFFER_TOKEN = 2 #The buffer contains the security token portion of the message. This is read-only for input parameters or read/write for output parameters.
+	SECBUFFER_PKG_PARAMS = 3 #These are transport-to-package–specific parameters. For example, the NetWare redirector may supply the server object identifier, while DCE RPC can supply an association UUID, and so on.
+	SECBUFFER_MISSING = 4 #The security package uses this value to indicate the number of missing bytes in a particular message. The pvBuffer member is ignored in this type.
 	SECBUFFER_EXTRA = 5 #The security package uses this value to indicate the number of extra or unprocessed bytes in a message.
+	SECBUFFER_STREAM_TRAILER = 6 #The buffer contains a protocol-specific trailer for a particular record. It is not usually of interest to callers.
+	SECBUFFER_STREAM_HEADER = 7 #The buffer contains a protocol-specific header for a particular record. It is not usually of interest to callers.
+	SECBUFFER_NEGOTIATION_INFO = 8
+	SECBUFFER_PADDING = 9 
+	SECBUFFER_STREAM = 10
 	SECBUFFER_MECHLIST = 11 #The buffer contains a protocol-specific list of object identifiers (OIDs). It is not usually of interest to callers.
 	SECBUFFER_MECHLIST_SIGNATURE = 12 #The buffer contains a signature of a SECBUFFER_MECHLIST buffer. It is not usually of interest to callers.
-	SECBUFFER_MISSING = 4 #The security package uses this value to indicate the number of missing bytes in a particular message. The pvBuffer member is ignored in this type.
-	SECBUFFER_PKG_PARAMS = 3 #These are transport-to-package–specific parameters. For example, the NetWare redirector may supply the server object identifier, while DCE RPC can supply an association UUID, and so on.
-	SECBUFFER_PRESHARED_KEY = 22 #The buffer contains the preshared key. The maximum allowed PSK buffer size is 256 bytes.
-	SECBUFFER_PRESHARED_KEY_IDENTITY = 23 #The buffer contains the preshared key identity.
-	SECBUFFER_SRTP_MASTER_KEY_IDENTIFIER = 20 #The buffer contains the SRTP master key identifier.
-	SECBUFFER_SRTP_PROTECTION_PROFILES = 19 #The buffer contains the list of SRTP protection profiles, in descending order of preference.
-	SECBUFFER_STREAM_HEADER = 7 #The buffer contains a protocol-specific header for a particular record. It is not usually of interest to callers.
-	SECBUFFER_STREAM_TRAILER = 6 #The buffer contains a protocol-specific trailer for a particular record. It is not usually of interest to callers.
 	SECBUFFER_TARGET = 13 #This flag is reserved. Do not use it.
+	SECBUFFER_CHANNEL_BINDINGS = 14  #	The buffer contains channel binding information.
+	SECBUFFER_CHANGE_PASS_RESPONSE = 15 #The buffer contains a DOMAIN_PASSWORD_INFORMATION structure.
 	SECBUFFER_TARGET_HOST = 16 #The buffer specifies the service principal name (SPN) of the target.
 								#This value is supported by the Digest security package when used with channel bindings.
 								#Windows Server 2008, Windows Vista, Windows Server 2003 and Windows XP:  This value is not supported.
-	SECBUFFER_TOKEN = 2 #The buffer contains the security token portion of the message. This is read-only for input parameters or read/write for output parameters.
-	SECBUFFER_TOKEN_BINDING = 21 #The buffer contains the supported token binding protocol version and key parameters, in descending order of preference.
+	SECBUFFER_ALERT = 17 #The buffer contains an alert message.
 	SECBUFFER_APPLICATION_PROTOCOLS = 18 #The buffer contains a list of application protocol IDs, one list per application protocol negotiation extension type to be enabled.
-	SECBUFFER_PADDING = 9 
+	SECBUFFER_SRTP_PROTECTION_PROFILES = 19 #The buffer contains the list of SRTP protection profiles, in descending order of preference.
+	SECBUFFER_SRTP_MASTER_KEY_IDENTIFIER = 20 #The buffer contains the SRTP master key identifier.
+	SECBUFFER_TOKEN_BINDING = 21 #The buffer contains the supported token binding protocol version and key parameters, in descending order of preference.
+	SECBUFFER_PRESHARED_KEY = 22 #The buffer contains the preshared key. The maximum allowed PSK buffer size is 256 bytes.
+	SECBUFFER_PRESHARED_KEY_IDENTITY = 23 #The buffer contains the preshared key identity.
+	SECBUFFER_DTLS_MTU = 24#The buffer contains the setting for the maximum transmission unit (MTU) size for DTLS only. The default value is 1096 and the valid configurable range is between 200 and 64*1024.
 	"""
 	In addition, BufferType can combine the following flags with any of the flags in the preceding table by using a bitwise-OR operation.
 	Value 	Meaning

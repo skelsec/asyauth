@@ -1,5 +1,7 @@
+import copy
 import os
 import struct
+from asyauth.common.winapi.constants import ISC_REQ
 
 from unicrypto import hmac
 from unicrypto import hashlib
@@ -14,7 +16,7 @@ from asyauth.protocols.ntlm.messages.negotiate import NTLMNegotiate
 from asyauth.protocols.ntlm.messages.challenge import NTLMChallenge
 from asyauth.protocols.ntlm.messages.authenticate import NTLMAuthenticate
 from asyauth.protocols.ntlm.creds_calc import netntlmv2, AVPAIRType, LMResponse, netntlm, netntlm_ess
-
+from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 		
 
 class NTLMClientNative:
@@ -61,7 +63,7 @@ class NTLMClientNative:
 		
 	def load_sessionkey(self, data):
 		self.RandomSessionKey = data
-		self.setup_crypto()
+		self.setup_crypto(True)
 	
 	def is_guest(self):
 		return self.credential.is_guest
@@ -267,7 +269,7 @@ class NTLMClientNative:
 		else:
 			return self.SignKey_server
 		
-	def setup_crypto(self):
+	def setup_crypto(self, is_remote = False):
 		if not self.RandomSessionKey:
 			self.RandomSessionKey = os.urandom(16)
 		
@@ -280,26 +282,60 @@ class NTLMClientNative:
 			self.EncryptedRandomSessionKey = rc4.encrypt(self.RandomSessionKey)
 
 		else:
-			#this check is here to provide the option to load the messages + the sessionbasekey manually
-			#then you will be able to use the sign and seal functions provided by this class
-			self.SessionBaseKey = self.ntlm_credentials.SessionBaseKey
-		
-			rc4 = RC4(self.KeyExchangeKey)
-			self.EncryptedRandomSessionKey = rc4.encrypt(self.RandomSessionKey)
+			if is_remote is False:
+				#this check is here to provide the option to load the messages + the sessionbasekey manually
+				#then you will be able to use the sign and seal functions provided by this class
+				self.SessionBaseKey = self.ntlm_credentials.SessionBaseKey
+			
+				rc4 = RC4(self.KeyExchangeKey)
+				self.EncryptedRandomSessionKey = rc4.encrypt(self.RandomSessionKey)
 		
 		self.calc_sealkey('Client')
 		self.calc_sealkey('Server')
 		self.calc_signkey('Client')
 		self.calc_signkey('Server')
 
+	def isc_to_ntlm_flags(self, flags):
+		# trying to guess what ISC flags match which
+		if isinstance(flags, NegotiateFlags) is True:
+			return flags
+		if flags is None:
+			# using the pre-defined flags
+			return self.credential.flags
+		ntlmflags = copy.deepcopy(self.credential.flags)
+		ntlmflags |= NegotiateFlags.NEGOTIATE_56
+		ntlmflags |= NegotiateFlags.NEGOTIATE_KEY_EXCH
+		ntlmflags |= NegotiateFlags.NEGOTIATE_128
+		ntlmflags |= NegotiateFlags.NEGOTIATE_VERSION
+		ntlmflags |= NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY
+		ntlmflags |= NegotiateFlags.NEGOTIATE_NTLM
+		ntlmflags |= NegotiateFlags.NEGOTIATE_LM_KEY
+		ntlmflags |= NegotiateFlags.REQUEST_TARGET
+		ntlmflags |= NegotiateFlags.NTLM_NEGOTIATE_OEM
+		ntlmflags |= NegotiateFlags.NEGOTIATE_UNICODE
+		
+		if ISC_REQ.INTEGRITY in flags:
+			ntlmflags |= NegotiateFlags.NEGOTIATE_SIGN
+		else:
+			ntlmflags  &= ~NegotiateFlags.NEGOTIATE_SIGN
+
+		
+		if ISC_REQ.CONFIDENTIALITY in flags:
+			ntlmflags |= NegotiateFlags.NEGOTIATE_SEAL
+		else:
+			ntlmflags  &= ~NegotiateFlags.NEGOTIATE_SEAL
+		
+		return ntlmflags
+
 	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None, spn=None):
+		flags = self.isc_to_ntlm_flags(flags)
 		if self.iteration_cnt == 0:
 			if authData is not None:
 				raise Exception('First call as client MUST be with empty data!')
 				
 			self.iteration_cnt += 1
 			#negotiate message was already calulcated in setup
-			self.ntlmNegotiate = NTLMNegotiate.construct(self.credential.flags, domainname = self.credential.negotiate_domain, workstationname = self.credential.negotiate_workstation, version = self.credential.negotiate_version)			
+			self.ntlmNegotiate = NTLMNegotiate.construct(flags, domainname = self.credential.negotiate_domain, workstationname = self.credential.negotiate_workstation, version = self.credential.negotiate_version)			
 			self.ntlmNegotiate_raw = self.ntlmNegotiate.to_bytes()
 			return self.ntlmNegotiate_raw, True, None
 			
@@ -308,7 +344,7 @@ class NTLMClientNative:
 			self.ntlmChallenge_raw = authData
 			self.ntlmChallenge = NTLMChallenge.from_bytes(authData)
 				
-			##################self.credential.flags = self.ntlmChallenge.NegotiateFlags
+			##################flags = self.ntlmChallenge.NegotiateFlags
 				
 			#we need to calculate the response based on the credential and the settings flags
 			if self.credential.ntlm_version == 1:
@@ -320,23 +356,23 @@ class NTLMClientNative:
 					lmresp = LMResponse()
 					self.set_version(False)
 					lmresp.Response = b'\x00'
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(self.credential.flags, lm_response= lmresp, mic=None, encrypted_session = self.EncryptedRandomSessionKey)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= lmresp, mic=None, encrypted_session = self.EncryptedRandomSessionKey)
 					return self.ntlmAuthenticate.to_bytes(), False, None
 						
-				if self.credential.flags & NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY:
+				if flags & NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY:
 					#Extended auth!
 					self.ntlm_credentials = netntlm_ess.construct(self.ntlmChallenge.ServerChallenge, self.challenge, self.credential)
 					
 					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key()
 					self.setup_crypto()
 						
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(self.credential.flags, lm_response= self.ntlm_credentials.LMResponse, nt_response = self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= self.ntlm_credentials.LMResponse, nt_response = self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey)
 				else:
 					self.ntlm_credentials = netntlm.construct(self.ntlmChallenge.ServerChallenge, self.credential)
 						
-					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key(with_lm = self.credential.flags & NegotiateFlags.NEGOTIATE_LM_KEY, non_nt_session_key = self.credential.flags & NegotiateFlags.REQUEST_NON_NT_SESSION_KEY)						
+					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key(with_lm = flags & NegotiateFlags.NEGOTIATE_LM_KEY, non_nt_session_key = flags & NegotiateFlags.REQUEST_NON_NT_SESSION_KEY)						
 					self.setup_crypto()
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(self.credential.flags, lm_response= self.ntlm_credentials.LMResponse, nt_response = self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= self.ntlm_credentials.LMResponse, nt_response = self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey)
 
 							
 							
@@ -348,7 +384,7 @@ class NTLMClientNative:
 					lmresp.Response = b'\x00'
 					self.set_version(False)
 					self.setup_crypto()
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(self.credential.flags, lm_response= lmresp, encrypted_session = self.EncryptedRandomSessionKey)						
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= lmresp, encrypted_session = self.EncryptedRandomSessionKey)						
 					return self.ntlmAuthenticate.to_bytes(), False, None
 						
 				else:
@@ -357,8 +393,11 @@ class NTLMClientNative:
 					if spn is not None:
 						ti[AVPAIRType.MsvAvTargetName] = spn #'TERMSRV/%s' % ti[AVPAIRType.MsvAvDnsComputerName]
 					if cb_data is not None:
+						cb_struct = ChannelBindingsStruct()
+						cb_struct.application_data = cb_data
+
 						md5_ctx = hashlib.new('md5')
-						md5_ctx.update(cb_data)
+						md5_ctx.update(cb_struct.to_bytes())
 						ti[AVPAIRType.MsvChannelBindings] = md5_ctx.digest()
 					###
 						
@@ -369,7 +408,7 @@ class NTLMClientNative:
 					#TODO: if "ti" / targetinfo in the challenge message has "MsvAvFlags" type and the bit for MIC is set (0x00000002) we need to send a MIC. probably...
 					mic = None
 						
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(self.credential.flags, domainname= self.credential.domain, workstationname= self.credential.negotiate_workstation, username= self.credential.username, lm_response= self.ntlm_credentials.LMResponse, nt_response= self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey, mic = mic)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, domainname= self.credential.domain, workstationname= self.credential.negotiate_workstation, username= self.credential.username, lm_response= self.ntlm_credentials.LMResponse, nt_response= self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey, mic = mic)
 				
 				
 			self.ntlmAuthenticate_raw = self.ntlmAuthenticate.to_bytes()

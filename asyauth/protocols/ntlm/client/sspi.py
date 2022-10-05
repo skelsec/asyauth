@@ -14,13 +14,27 @@ class NTLMClientSSPI:
 	@property
 	def ntlmChallenge(self):
 		return self.ntlm_ctx.ntlmChallenge
+	
+	def get_seq_number(self):
+		return self.ntlm_ctx.seq_number
 		
 	def get_sealkey(self, mode = 'Client'):
 		return self.ntlm_ctx.get_sealkey(mode = mode)
 			
 	def get_signkey(self, mode = 'Client'):
 		return self.ntlm_ctx.get_signkey(mode = mode)
-		
+	
+	async def encrypt(self, data, sequence_no):
+		return await self.ntlm_ctx.encrypt(data, data, sequence_no)
+
+	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
+		return await self.ntlm_ctx.decrypt(data, sequence_no, direction=direction, auth_data=auth_data)
+
+	async def sign(self, data, message_no, direction=None, reset_cipher = False):
+		return await self.ntlm_ctx.sign(data, message_no, direction=direction, reset_cipher = reset_cipher)
+
+	async def verify(self, data, signature):
+		return await self.ntlm_ctx.verify(data, signature)
 		
 	def SEAL(self, signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, cipher_encrypt):
 		return self.ntlm_ctx.SEAL(signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, cipher_encrypt)
@@ -39,28 +53,34 @@ class NTLMClientSSPI:
 		
 	def is_extended_security(self):
 		return self.ntlm_ctx.is_extended_security()
+	
+	def signing_needed(self):
+		return self.ntlm_ctx.signing_needed()
+	
+	def encryption_needed(self):
+		return self.ntlm_ctx.encryption_needed()
 		
 	async def encrypt(self, data, message_no):
-		return self.ntlm_ctx.encrypt(data, message_no)
+		return await self.ntlm_ctx.encrypt(data, message_no)
 		
-	async def decrypt(self, data, message_no):
-		return self.ntlm_ctx.decrypt(data, message_no)
+	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
+		return await self.ntlm_ctx.decrypt(data, sequence_no, direction=direction, auth_data=auth_data)
 	
-	async def authenticate(self, authData = None, flags = None, seq_number = 0, is_rpc = False, spn = None):
+	async def authenticate(self, authData = None, flags = None, seq_number = 0, spn = None, cb_data = None):
 		to_continue = False
 		if flags is None:
 			flags = self.flags
 		
 		if authData is None:
 			self.sspi.acquire_handle(None, spn) #self.credential.username
-			result, data, self.flags, expiry = self.sspi.initialize_context(spn, authData, flags=flags)
+			result, data, self.flags, expiry = self.sspi.initialize_context(spn, authData, flags=flags, cb_data=cb_data)
 			if result == SSPIResult.CONTINUE:
 				to_continue = True
 			self.ntlm_ctx.load_negotiate(data)
 			return data, to_continue, None
 		else:
 			self.ntlm_ctx.load_challenge(authData)
-			result, data, self.flags, expiry = self.sspi.initialize_context(spn, authData, flags=flags)
+			result, data, self.flags, expiry = self.sspi.initialize_context(spn, authData, flags=flags, cb_data=cb_data)
 			if result == SSPIResult.CONTINUE:
 				to_continue = True
 		

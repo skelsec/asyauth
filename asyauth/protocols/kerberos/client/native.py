@@ -1,5 +1,6 @@
 
 from asyauth import logger
+from asyauth.common.winapi.constants import ISC_REQ
 from asyauth.protocols.kerberos.gssapi import get_gssapi
 from asyauth.protocols.kerberos.gssapismb import get_gssapi as gssapi_smb
 from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, Ticket
@@ -74,14 +75,47 @@ class KerberosClientNative:
 	
 	def get_session_key(self):
 		return self.session_key.contents
+
+	def iscreq_to_gssapiflags(self, flags):
+		if flags is None:
+			return self.flags
+		kflags = GSSAPIFlags.GSS_C_CONF_FLAG |\
+			GSSAPIFlags.GSS_C_INTEG_FLAG |\
+			GSSAPIFlags.GSS_C_REPLAY_FLAG |\
+			GSSAPIFlags.GSS_C_SEQUENCE_FLAG
+		if ISC_REQ.INTEGRITY in flags:
+			kflags |= GSSAPIFlags.GSS_C_INTEG_FLAG
+		else:
+			kflags &= ~GSSAPIFlags.GSS_C_INTEG_FLAG
+		if ISC_REQ.CONFIDENTIALITY in flags:
+			kflags |= GSSAPIFlags.GSS_C_CONF_FLAG
+		else:
+			kflags &= ~GSSAPIFlags.GSS_C_CONF_FLAG
+		if ISC_REQ.REPLAY_DETECT in flags:
+			kflags |= GSSAPIFlags.GSS_C_REPLAY_FLAG
+		else:
+			kflags &= ~GSSAPIFlags.GSS_C_REPLAY_FLAG
+		if ISC_REQ.SEQUENCE_DETECT in flags:
+			kflags |= GSSAPIFlags.GSS_C_SEQUENCE_FLAG
+		else:
+			kflags &= ~GSSAPIFlags.GSS_C_SEQUENCE_FLAG
+		if ISC_REQ.USE_DCE_STYLE in flags:
+			kflags |= GSSAPIFlags.GSS_C_DCE_STYLE
+		else:
+			kflags &= ~GSSAPIFlags.GSS_C_DCE_STYLE
+		if ISC_REQ.MUTUAL_AUTH in flags:
+			kflags |= GSSAPIFlags.GSS_C_MUTUAL_FLAG
+		else:
+			kflags &= ~GSSAPIFlags.GSS_C_MUTUAL_FLAG
+		return kflags
+		
 	
 	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None, spn = None):
 		"""
 		This function is called (multiple times depending on the flags) to perform authentication. 
 		"""
 		try:
-			if flags is None:
-				flags = self.flags
+			self.flags = self.iscreq_to_gssapiflags(flags)
 
 			if spn is None:
 				raise Exception("SPN is needed for kerberos!")
@@ -108,21 +142,53 @@ class KerberosClientNative:
 					tgs, encpart, self.session_key = await self.kc.get_TGS(spn)#, override_etype = self.preferred_etypes)
 				
 				ap_opts = []
-				if GSSAPIFlags.GSS_C_MUTUAL_FLAG in flags or GSSAPIFlags.GSS_C_DCE_STYLE in flags:
-					if GSSAPIFlags.GSS_C_MUTUAL_FLAG in flags:
+				if GSSAPIFlags.GSS_C_MUTUAL_FLAG in self.flags or GSSAPIFlags.GSS_C_DCE_STYLE in self.flags:
+					if GSSAPIFlags.GSS_C_MUTUAL_FLAG in self.flags:
 						ap_opts.append('mutual-required')
 					if self.from_ccache is False:
-						apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = flags, seq_number = self.seq_number, ap_opts=ap_opts, cb_data = cb_data)
+						apreq = self.kc.construct_apreq(
+							tgs, 
+							encpart, 
+							self.session_key, 
+							flags = self.flags, 
+							seq_number = self.seq_number, 
+							ap_opts=ap_opts, 
+							cb_data = cb_data
+						)
 					else:
-						apreq = self.kc.construct_apreq_from_ticket(Ticket(tgs['ticket']).dump(), self.session_key, tgs['crealm'], tgs['cname']['name-string'][0], flags = flags, seq_number = self.seq_number, ap_opts = ap_opts, cb_data = cb_data)
+						apreq = self.kc.construct_apreq_from_ticket(
+							Ticket(tgs['ticket']).dump(), 
+							self.session_key, 
+							tgs['crealm'], tgs['cname']['name-string'][0], 
+							flags = self.flags, 
+							seq_number = self.seq_number, 
+							ap_opts = ap_opts, 
+							cb_data = cb_data
+						)
 					return apreq, True, None
 				
 				else:
 					#not mutual nor dce auth will take one step only
 					if self.from_ccache is False:
-						apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = flags, seq_number = self.seq_number, ap_opts=ap_opts, cb_data = cb_data)
+						apreq = self.kc.construct_apreq(
+							tgs, 
+							encpart, 
+							self.session_key, 
+							flags = self.flags, 
+							seq_number = self.seq_number, 
+							ap_opts=ap_opts, 
+							cb_data = cb_data)
 					else:
-						apreq = self.kc.construct_apreq_from_ticket(Ticket(tgs['ticket']).dump(), self.session_key, tgs['crealm'], tgs['cname']['name-string'][0], flags = flags, seq_number = self.seq_number, ap_opts = ap_opts, cb_data = cb_data)
+						apreq = self.kc.construct_apreq_from_ticket(
+							Ticket(tgs['ticket']).dump(), 
+							self.session_key, 
+							tgs['crealm'], 
+							tgs['cname']['name-string'][0], 
+							flags = self.flags, 
+							seq_number = self.seq_number, 
+							ap_opts = ap_opts, 
+							cb_data = cb_data
+						)
 					
 					
 					self.gssapi = get_gssapi(self.session_key)
@@ -158,7 +224,7 @@ class KerberosClientNative:
 				ap_rep['enc-part'] = EncryptedData({'etype': self.session_key.enctype, 'cipher': apreppart_data_enc}) 
 					
 				token = AP_REP(ap_rep).dump()
-				if GSSAPIFlags.GSS_C_DCE_STYLE in flags:
+				if GSSAPIFlags.GSS_C_DCE_STYLE in self.flags:
 					self.gssapi = gssapi_smb(self.session_key)
 				else:
 					self.gssapi = get_gssapi(self.session_key)

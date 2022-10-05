@@ -37,7 +37,6 @@ maxtoken_size = 2880 # bytes
 _FILETIME_null_date = datetime.datetime(1601, 1, 1, 0, 0, 0)
 def FiletimeToDateTime(ft):
 	timestamp = (ft.dwHighDateTime << 32) + ft.dwLowDateTime
-	print(timestamp)
 	return _FILETIME_null_date + datetime.timedelta(microseconds=timestamp/10)
 
 #timestamp is LARGE_INTEGER
@@ -64,6 +63,18 @@ class LUID(Structure):
 
 PLUID = POINTER(LUID)
 
+class SEC_CHANNEL_BINDINGS(Structure):
+	_fields_ = [
+		('dwInitiatorAddrType',ULONG),
+		('cbInitiatorLength',ULONG),
+		('dwInitiatorOffset',ULONG),
+		('dwAcceptorAddrType',ULONG),
+		('cbAcceptorLength',ULONG),
+		('dwAcceptorOffset',ULONG),
+		('cbApplicationDataLength',ULONG),
+		('dwApplicationDataOffset',ULONG),
+		('Buffer', LPVOID)
+	]
 	
 # https://docs.microsoft.com/en-us/windows/desktop/api/sspi/ns-sspi-secpkgcontext_sessionkey
 class SecPkgContext_SessionKey(Structure):
@@ -74,11 +85,11 @@ class SecPkgContext_SessionKey(Structure):
 		return ctypes.string_at(self.SessionKey, size=self.SessionKeyLength)
 
 # https://github.com/benjimin/pywebcorp/blob/master/pywebcorp/ctypes_sspi.py
-class SecHandle(Structure): 
+class SecHandle(ctypes.Structure): 
 	
-	_fields_ = [('dwLower',POINTER(ULONG)),('dwUpper',POINTER(ULONG))]
+	_fields_ = [('dwLower',PULONG),('dwUpper',PULONG)]
 	def __init__(self): # populate deeply (empty memory fields) rather than shallow null POINTERs.
-		super(Structure, self).__init__(byref(ULONG()), byref(ULONG()))
+		ctypes.Structure.__init__(self, ctypes.pointer(ULONG()), ctypes.pointer(ULONG()))
 
 class SecBuffer(Structure):
 	"""Stores a memory buffer: size, type-flag, and POINTER. 
@@ -88,7 +99,7 @@ class SecBuffer(Structure):
 	_fields_ = [('cbBuffer',ULONG),('BufferType',ULONG),('pvBuffer',PVOID)]
 	def __init__(self, token=b'\x00'*maxtoken_size, buffer_type = SECBUFFER_TYPE.SECBUFFER_TOKEN):
 		buf = ctypes.create_string_buffer(token, size=len(token)) 
-		Structure.__init__(self,sizeof(buf),buffer_type.value,ctypes.cast(byref(buf),PVOID))
+		Structure.__init__(self,sizeof(buf),buffer_type.value,ctypes.cast(ctypes.pointer(buf),PVOID))
 	@property
 	def Buffer(self):
 		return (SECBUFFER_TYPE(self.BufferType), ctypes.string_at(self.pvBuffer, size=self.cbBuffer))	 
@@ -102,7 +113,7 @@ class SecBufferDesc(Structure):
 		if secbuffers is not None:
 			Structure.__init__(self,0,len(secbuffers),(SecBuffer * len(secbuffers))(*secbuffers))
 		else:
-			Structure.__init__(self,0,1,byref(SecBuffer()))
+			Structure.__init__(self,0,1,ctypes.pointer(SecBuffer()))
 	def __getitem__(self, index):
 		return self.pBuffers[index]
 		
@@ -166,12 +177,7 @@ def AcquireCredentialsHandle(client_name, package_name, tragetspn, cred_usage, p
 	return creds
 	
 # https://msdn.microsoft.com/en-us/library/windows/desktop/aa375507(v=vs.85).aspx
-def InitializeSecurityContext(creds, target, ctx = None, flags = ISC_REQ.INTEGRITY | ISC_REQ.CONFIDENTIALITY | ISC_REQ.SEQUENCE_DETECT | ISC_REQ.REPLAY_DETECT, TargetDataRep  = 0, token = None):
-	#print('==== InitializeSecurityContext ====')
-	#print('Creds: %s' % creds)
-	#print('Target: %s' % target)
-	#print('ctx: %s' % ctx)
-	#print('token: %s' % token)
+def InitializeSecurityContext(creds, target, ctx = None, flags = ISC_REQ.INTEGRITY | ISC_REQ.CONFIDENTIALITY | ISC_REQ.SEQUENCE_DETECT | ISC_REQ.REPLAY_DETECT, TargetDataRep  = 0, token = None, cb_data = None):
 	def errc(result, func, arguments):
 		if SEC_E(result) in [SEC_E.OK, SEC_E.COMPLETE_AND_CONTINUE, SEC_E.COMPLETE_NEEDED, SEC_E.CONTINUE_NEEDED, SEC_E.INCOMPLETE_CREDENTIALS]:
 			return SEC_E(result)
@@ -181,7 +187,6 @@ def InitializeSecurityContext(creds, target, ctx = None, flags = ISC_REQ.INTEGRI
 	_InitializeSecurityContext.argtypes = [PCredHandle, PCtxtHandle, PSEC_CHAR, ULONG, ULONG, ULONG, PSecBufferDesc, ULONG, PCtxtHandle, PSecBufferDesc, PULONG, PTimeStamp]
 	_InitializeSecurityContext.restype  = DWORD
 	_InitializeSecurityContext.errcheck  = errc
-	
 	if target:
 		ptarget = LPSTR(target.encode('ascii'))
 	else:
@@ -190,10 +195,14 @@ def InitializeSecurityContext(creds, target, ctx = None, flags = ISC_REQ.INTEGRI
 	outputflags = ULONG()
 	expiry = TimeStamp()
 	
+	sb = []
 	if token:
-		token = SecBufferDesc([SecBuffer(token)])
-		
-	
+		sb = [SecBuffer(token)]
+	if cb_data:
+		cb = b'\x00'*24 + len(cb_data).to_bytes(4, byteorder='little', signed=False) + (32).to_bytes(4, byteorder='little', signed=False) + cb_data
+		sb.append(SecBuffer(token=cb, buffer_type=SECBUFFER_TYPE.SECBUFFER_CHANNEL_BINDINGS))
+	token = SecBufferDesc(sb)
+
 	if not ctx:
 		ctx = CtxtHandle()
 		res = _InitializeSecurityContext(byref(creds), None, ptarget, int(flags), 0 ,TargetDataRep, byref(token) if token else None, 0, byref(ctx), byref(newbuf), byref(outputflags), byref(expiry))
@@ -201,8 +210,7 @@ def InitializeSecurityContext(creds, target, ctx = None, flags = ISC_REQ.INTEGRI
 		res = _InitializeSecurityContext(byref(creds), byref(ctx), ptarget, int(flags), 0 ,TargetDataRep, byref(token) if token else None, 0, byref(ctx), byref(newbuf), byref(outputflags), byref(expiry))
 	
 	data = newbuf.Buffers
-	
-	return res, ctx, data, ISC_REQ(outputflags.value), expiry
+	return res, ctx, data[0][1], ISC_REQ(outputflags.value), expiry
 	
 def DecryptMessage(ctx, token, data, message_no = 0):
 	def errc(result, func, arguments):
@@ -278,13 +286,11 @@ def EncryptMessage(ctx, data, message_no = 0, fQOP = None):
 	#secbuffers.append(SecBuffer(token = b'',buffer_type = SECBUFFER_TYPE.SECBUFFER_EMPTY))
 	
 	data = SecBufferDesc(secbuffers)
-	print(data)
 	
 	flags = ULONG(1)
 	message_no = ULONG(message_no)
 
 	res = _EncryptMessage(ctx, flags, byref(data), message_no)
-	print(data)
 	return res, data.Buffers
 	
 
@@ -328,3 +334,4 @@ def SetContextAttributes(ctx, attr, data):
 	res = _SetContextAttributes(byref(ctx), attr.value, data_buff, data_len)
 	
 	return
+
