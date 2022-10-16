@@ -67,6 +67,8 @@ class NTLMCredential(UniCredential):
 		elif self.subprotocol.type == asyauthSubProtocol.WSNET:
 			from asyauth.protocols.ntlm.client.wsnet import NTLMClientWSNET
 			return NTLMClientWSNET(self)
+		elif self.subprotocol.type == asyauthSubProtocol.CUSTOM:
+			return self.subprotocol.factoryobj.build_context(self)
 		else:
 			raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
 	

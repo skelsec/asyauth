@@ -16,6 +16,7 @@ class asyauthSubProtocol(enum.Enum):
 	SSPI = 'SSPI'
 	WSNET = 'WSNET'
 	SSPIPROXY = 'SSPIPROXY'
+	CUSTOM = 'CUSTOM'
 
 class asyauthSecret(enum.Enum):
 	NONE = 'NONE'

@@ -45,7 +45,7 @@ class SPNEGOClientNative:
 		
 	def get_original_context(self, ctx_name):
 		"""
-		Returns a copy of the original (not used) authentication context sp[ecified by name.
+		Returns a copy of the original (not used) authentication context specified by name.
 		You may use this ctx to perform future authentication, as it has the user credentials
 		"""
 		return copy.deepcopy(self.original_authentication_contexts[ctx_name])

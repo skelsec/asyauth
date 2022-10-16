@@ -327,7 +327,7 @@ class NTLMClientNative:
 		
 		return ntlmflags
 
-	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None, spn=None):
+	async def authenticate(self, authData, flags = None, cb_data = None, spn=None):
 		flags = self.isc_to_ntlm_flags(flags)
 		if self.iteration_cnt == 0:
 			if authData is not None:
