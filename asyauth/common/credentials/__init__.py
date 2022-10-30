@@ -77,6 +77,10 @@ class UniCredential:
 				username = url_e.username
 		
 		secret = url_e.password
+		
+		if secret is None and username is None:
+			protocol = asyauthProtocol.NONE
+
 		credobj = None
 		if protocol == asyauthProtocol.KERBEROS:
 			from asyauth.common.credentials.kerberos import KerberosCredential
