@@ -1,3 +1,4 @@
+import base64
 from urllib.parse import urlparse, parse_qs
 from asyauth.utils.paramprocessor import str_one, int_one, bool_one
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol
@@ -11,6 +12,19 @@ class UniCredential:
 		self.stype = stype
 		self.protocol = protocol
 		self.subprotocol = subprotocol
+
+		if stype in [asyauthSecret.PASS, asyauthSecret.PW]:
+			self.stype = asyauthSecret.PASSWORD
+		elif stype == asyauthSecret.PWB64:
+			self.stype = asyauthSecret.PASSWORD
+			self.secret = base64.b64decode(self.secret)
+		elif stype == asyauthSecret.PWHEX:
+			self.stype = asyauthSecret.PASSWORD
+			self.secret = bytes.fromhex(self.secret)
+		elif stype == asyauthSecret.PWPROMPT:
+			import getpass
+			self.stype = asyauthSecret.PASSWORD
+			self.secret = getpass.getpass('Enter password: ')
 	
 	def build_context(self):
 		# override this function

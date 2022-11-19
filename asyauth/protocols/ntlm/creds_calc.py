@@ -520,7 +520,9 @@ def LMOWFv1(password):
 	
 
 def NTOWFv1(password):
-	return hashlib.md4(password.encode('utf-16le')).digest()
+	if isinstance(password, str) is True:
+		password = password.encode('utf-16le')
+	return hashlib.md4(password).digest()
 
 
 def LMOWFv2(Passwd, User, UserDom, PasswdHash = None):
