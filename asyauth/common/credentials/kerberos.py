@@ -34,10 +34,16 @@ class KerberosCredential(UniCredential):
 				'g' : 2
 			}
 
+		if self.stype is asyauthSecret.NT:
+			self.stype = asyauthSecret.RC4
+
+		self.sanity_check()
+	
+	def sanity_check(self):
 		if self.domain is None or self.domain == '':
-			raise Exception('Kerberos credential must have domain set!')
+			raise Exception('Kerberos credential must have domain set! %s' % str(self))
 		if self.target is None or self.target.dc_ip is None:
-			raise Exception('Kerberos credential target must have dc_ip set!')
+			raise Exception('Kerberos credential target must have dc_ip set!')		
 
 	def get_pkinit(self) -> PKINIT:
 		if self.stype == asyauthSecret.CERTSTORE:
@@ -68,7 +74,7 @@ class KerberosCredential(UniCredential):
 			encoding = 'hex'
 		return basetype, encoding
 
-	def to_ccred(self):
+	def to_ccred(self) -> KCRED:
 		basetype, encoding = self.get_basetype_and_encoding()
 		if basetype == asyauthSecret.KEYTAB:
 			return KCRED.from_keytab(self.secret, self.username, self.domain, encoding=encoding)
@@ -86,24 +92,46 @@ class KerberosCredential(UniCredential):
 		if self.stype in [asyauthSecret.PASSWORD, asyauthSecret.PW, asyauthSecret.PASS]:
 			res.password = self.secret
 		elif self.stype in [asyauthSecret.NT, asyauthSecret.RC4]:
-			if len(self.secret) != 32:
-				raise Exception('Incorrect RC4/NT key! %s' % self.secret)
+			if isinstance(self.secret, str) is True:
+				if len(self.secret) != 32:
+					raise Exception('Incorrect RC4/NT key! %s' % self.secret)
+			elif isinstance(self.secret, bytes):
+				if len(self.secret) != 16:
+					raise Exception('Incorrect RC4/NT key! %s' % self.secret)
 			res.nt_hash = self.secret
 			res.kerberos_key_rc4 = self.secret
 		elif self.stype == asyauthSecret.AES:
-			if len(self.secret) == 32:
-				res.kerberos_key_aes_128 = self.secret
-			elif len(self.secret) == 64:
-				res.kerberos_key_aes_256 = self.secret
+			if isinstance(self.secret, str) is True:
+				if len(self.secret) == 32:
+					res.kerberos_key_aes_128 = self.secret
+				elif len(self.secret) == 64:
+					res.kerberos_key_aes_256 = self.secret
+				else:
+					raise Exception('Incorrect AES key! %s' % self.secret)
+			elif isinstance(self.secret, bytes) is True:
+				if len(self.secret) == 16:
+					res.kerberos_key_aes_128 = self.secret
+				elif len(self.secret) == 32:
+					res.kerberos_key_aes_256 = self.secret
+				else:
+					raise Exception('Incorrect AES key! %s' % self.secret)
 			else:
 				raise Exception('Incorrect AES key! %s' % self.secret)
 		elif self.stype == asyauthSecret.DES:
-			if len(self.secret) != 16:
-				raise Exception('Incorrect DES key! %s' % self.secret)
+			if isinstance(self.secret, str) is True:
+				if len(self.secret) != 16:
+					raise Exception('Incorrect DES key! %s' % self.secret)
+			elif isinstance(self.secret, bytearray) is True:
+				if len(self.secret) != 8:
+					raise Exception('Incorrect DES key! %s' % self.secret)
 			res.kerberos_key_des = self.secret
 		elif self.stype in [asyauthSecret.DES3, asyauthSecret.TDES]:
-			if len(self.secret) != 24:
-				raise Exception('Incorrect DES3 key! %s' % self.secret)
+			if isinstance(self.secret, str) is True:
+				if len(self.secret) != 24:
+					raise Exception('Incorrect DES3 key! %s' % self.secret)
+			elif isinstance(self.secret, bytearray) is True:
+				if len(self.secret) != 12:
+					raise Exception('Incorrect DES3 key! %s' % self.secret)
 			res.kerberos_key_des3 = self.secret
 		elif self.stype == asyauthSecret.NONE:
 			res.nopreauth = True

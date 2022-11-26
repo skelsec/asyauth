@@ -7,6 +7,14 @@ from asyauth.common.subprotocols import SubProtocolNative
 from asyauth.protocols.ntlm.structures.version import Version, WindowsMajorVersion, WindowsMinorVersion
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 
+ASYAUTH_NTLMCRED_SUPPORTED_STYPE = [
+	asyauthSecret.PASSWORD,
+	asyauthSecret.PASS,
+	asyauthSecret.PW,
+	asyauthSecret.PWHEX,
+	asyauthSecret.NT,
+	asyauthSecret.RC4
+]
 class NTLMCredential(UniCredential):
 	def __init__(self, secret, username, domain, stype:asyauthSecret, subprotocol:SubProtocol = SubProtocolNative()):
 		UniCredential.__init__(
@@ -18,6 +26,11 @@ class NTLMCredential(UniCredential):
 			protocol = asyauthProtocol.NTLM,
 			subprotocol=subprotocol
 		)
+
+		if self.stype is asyauthSecret.RC4:
+			self.stype = asyauthSecret.NT
+		if self.stype not in ASYAUTH_NTLMCRED_SUPPORTED_STYPE:
+			raise Exception('Unsupported Secret Type for NTLM auth: %s' % self.stype)
 		
 		self.is_guest = False
 		self.negotiate_workstation = None
