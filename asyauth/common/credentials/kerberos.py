@@ -82,8 +82,10 @@ class KerberosCredential(UniCredential):
 			return KCRED.from_kirbi(self.secret, encoding=encoding)
 		if basetype == asyauthSecret.CCACHE:
 			return KCRED.from_ccache(self.secret, self.username, self.domain, encoding=encoding)
-		if basetype == asyauthSecret.PFXSTR:
+		if basetype == asyauthSecret.PFX:
 			return KCRED.from_pfx(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain, encoding=encoding)
+		if basetype == asyauthSecret.PFXSTR:
+			return KCRED.from_pfx_string(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain)
 
 		res = KCRED()
 		res.username = self.username
