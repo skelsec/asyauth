@@ -1,4 +1,5 @@
 import base64
+import platform
 from urllib.parse import urlparse, parse_qs
 from asyauth.utils.paramprocessor import str_one, int_one, bool_one
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol
@@ -176,6 +177,71 @@ class UniCredential:
 			t += '%s: %s\r\n' % (k, str(val))
 			
 		return t
+	
+	@staticmethod
+	def get_sspi_ntlm():
+		"""Returns an NTLM credential object matching the current user (Windows only)"""
+		if platform.system() != 'Windows':
+			raise Exception('This function only works on Windows systems!')
+		from winacl.functions.highlevel import get_logon_info
+		from asyauth.common.credentials.ntlm import NTLMCredential
+		userinfo = get_logon_info()
+		return NTLMCredential(
+			None,
+			userinfo['username'],
+			userinfo['domain'],
+			stype=asyauthSecret.NONE,
+			subprotocol = SubProtocolSSPI()
+		)
+	
+	@staticmethod
+	def get_sspi_kerberos():
+		"""Returns a Kerberos credential object matching the current user (Windows only)"""
+		if platform.system() != 'Windows':
+			raise Exception('This function only works on Windows systems!')
+		from winacl.functions.highlevel import get_logon_info
+		from asyauth.common.credentials.kerberos import KerberosCredential
+		from asysocks.unicomm.common.target import UniTarget, UniProto
+		userinfo = get_logon_info()
+		dctarget = UniTarget(userinfo['logonserver'], 88, UniProto.CLIENT_TCP)
+		return KerberosCredential(
+			None,
+			userinfo['username'],
+			userinfo['domain'],
+			stype=asyauthSecret.NONE,
+			target=dctarget,
+			subprotocol = SubProtocolSSPI()
+		)
+
+	@staticmethod
+	def get_sspi(authtype:str):
+		if platform.system() != 'Windows':
+			raise Exception('This function only works on Windows systems!')
+		if authtype.upper() == 'NTLM':
+			credobj = UniCredential.get_sspi_ntlm()
+		elif authtype.upper() == 'KERBEROS':
+			credobj = UniCredential.get_sspi_kerberos()
+		else:
+			raise Exception('Only NTLM or KERBEROS auth types supported here!')
+		return credobj
+
+	@staticmethod
+	def get_sspi_spnego(authtype:str):
+		"""Returns a SPNEGO credential object matching the current user (Windows only)"""
+		if platform.system() != 'Windows':
+			raise Exception('This function only works on Windows systems!')
+		from asyauth.common.credentials.spnego import SPNEGOCredential
+		credobj = UniCredential.get_sspi(authtype)
+		return SPNEGOCredential([credobj])
+	
+	@staticmethod
+	def get_sspi_spnego(authtype:str):
+		"""Returns a CREDSSP credential object matching the current user (Windows only)"""
+		if platform.system() != 'Windows':
+			raise Exception('This function only works on Windows systems!')
+		from asyauth.common.credentials.credssp import CREDSSPCredential
+		credobj = UniCredential.get_sspi(authtype)
+		return CREDSSPCredential([credobj])
 
 
 from asyauth.common.credentials.credssp import CREDSSPCredential
