@@ -29,7 +29,7 @@ class NTLMCredential(UniCredential):
 
 		if self.stype is asyauthSecret.RC4:
 			self.stype = asyauthSecret.NT
-		if self.stype not in ASYAUTH_NTLMCRED_SUPPORTED_STYPE:
+		if isinstance(self.subprotocol, SubProtocolNative) and self.stype not in ASYAUTH_NTLMCRED_SUPPORTED_STYPE:
 			raise Exception('Unsupported Secret Type for NTLM auth: %s' % self.stype)
 		
 		self.is_guest = False

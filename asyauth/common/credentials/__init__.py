@@ -203,11 +203,17 @@ class UniCredential:
 		from asyauth.common.credentials.kerberos import KerberosCredential
 		from asysocks.unicomm.common.target import UniTarget, UniProto
 		userinfo = get_logon_info()
-		dctarget = UniTarget(userinfo['logonserver'], 88, UniProto.CLIENT_TCP)
+		dctarget = UniTarget(
+			userinfo['logonserver'], 
+			88, 
+			UniProto.CLIENT_TCP, 
+			dc_ip=userinfo['logonserver'],
+			domain = userinfo['dnsdomainname'],
+		)
 		return KerberosCredential(
 			None,
 			userinfo['username'],
-			userinfo['domain'],
+			userinfo['dnsdomainname'],
 			stype=asyauthSecret.NONE,
 			target=dctarget,
 			subprotocol = SubProtocolSSPI()

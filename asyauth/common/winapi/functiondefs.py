@@ -181,7 +181,7 @@ def InitializeSecurityContext(creds, target, ctx = None, flags = ISC_REQ.INTEGRI
 	def errc(result, func, arguments):
 		if SEC_E(result) in [SEC_E.OK, SEC_E.COMPLETE_AND_CONTINUE, SEC_E.COMPLETE_NEEDED, SEC_E.CONTINUE_NEEDED, SEC_E.INCOMPLETE_CREDENTIALS]:
 			return SEC_E(result)
-		raise Exception('%s failed with error code %s (%s)' % ('InitializeSecurityContext', result, SEC_E(result)))
+		raise Exception('%s failed with error code %s (%s) Target: %s' % ('InitializeSecurityContext', result, SEC_E(result), target))
 		
 	_InitializeSecurityContext = windll.Secur32.InitializeSecurityContextA
 	_InitializeSecurityContext.argtypes = [PCredHandle, PCtxtHandle, PSEC_CHAR, ULONG, ULONG, ULONG, PSecBufferDesc, ULONG, PCtxtHandle, PSecBufferDesc, PULONG, PTimeStamp]
