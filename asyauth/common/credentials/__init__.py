@@ -18,10 +18,10 @@ class UniCredential:
 			self.stype = asyauthSecret.PASSWORD
 		elif stype == asyauthSecret.PWB64:
 			self.stype = asyauthSecret.PASSWORD
-			self.secret = base64.b64decode(self.secret)
+			self.secret = base64.b64decode(self.secret).decode()
 		elif stype == asyauthSecret.PWHEX:
 			self.stype = asyauthSecret.PASSWORD
-			self.secret = bytes.fromhex(self.secret)
+			self.secret = bytes.fromhex(self.secret).decode()
 		elif stype == asyauthSecret.PWPROMPT:
 			import getpass
 			self.stype = asyauthSecret.PASSWORD
