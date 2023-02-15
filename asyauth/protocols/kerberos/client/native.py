@@ -13,6 +13,7 @@ from minikerberos.common.spn import KerberosSPN
 import datetime
 from minikerberos.protocol.constants import MESSAGE_TYPE
 from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData, Ticket
+from minikerberos.protocol.ticketutils import construct_apreq_from_ticket
 
 
 class KerberosClientNative:
@@ -120,7 +121,7 @@ class KerberosClientNative:
 			if spn is None:
 				raise Exception("SPN is needed for kerberos!")
 			else:
-				spn = KerberosSPN.from_target_string(spn)
+				spn = KerberosSPN.from_spn(spn)
 
 			if self.kc is None:
 				self.kc = AIOKerberosClient(self.ccred, self.credential.target)
@@ -156,10 +157,11 @@ class KerberosClientNative:
 							cb_data = cb_data
 						)
 					else:
-						apreq = self.kc.construct_apreq_from_ticket(
+						apreq = construct_apreq_from_ticket(
 							Ticket(tgs['ticket']).dump(), 
 							self.session_key, 
-							tgs['crealm'], tgs['cname']['name-string'][0], 
+							tgs['crealm'], 
+							tgs['cname']['name-string'][0], 
 							flags = self.flags, 
 							seq_number = self.seq_number, 
 							ap_opts = ap_opts, 
@@ -179,7 +181,7 @@ class KerberosClientNative:
 							ap_opts=ap_opts, 
 							cb_data = cb_data)
 					else:
-						apreq = self.kc.construct_apreq_from_ticket(
+						apreq = construct_apreq_from_ticket(
 							Ticket(tgs['ticket']).dump(), 
 							self.session_key, 
 							tgs['crealm'], 
