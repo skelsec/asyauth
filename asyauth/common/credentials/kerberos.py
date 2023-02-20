@@ -1,5 +1,3 @@
-import copy
-from email.mime import base
 from typing import List
 from asyauth.common.credentials import UniCredential
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol

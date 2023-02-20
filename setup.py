@@ -46,9 +46,9 @@ setup(
 		"Operating System :: OS Independent",
 	),
 	install_requires=[
-		'unicrypto>=0.0.9',
+		'unicrypto>=0.0.10',
 		'asn1crypto>=1.3.0',
-		'asysocks>=0.2.2',
-		'minikerberos>=0.3.5',
+		'asysocks>=0.2.5',
+		'minikerberos>=0.4.0',
 	],
 )

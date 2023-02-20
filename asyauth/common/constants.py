@@ -10,6 +10,7 @@ class asyauthProtocol(enum.Enum):
 	CREDSSP = 'CREDSSP'
 	SPNEGO = 'SPNEGO'
 	SPNEGOEX = 'SPNEGOEX'
+	SSL = 'SSL' # SSL/TLS schannel later
 
 class asyauthSubProtocol(enum.Enum):
 	NATIVE = 'NATIVE'

@@ -18,10 +18,10 @@ class UniCredential:
 			self.stype = asyauthSecret.PASSWORD
 		elif stype == asyauthSecret.PWB64:
 			self.stype = asyauthSecret.PASSWORD
-			self.secret = base64.b64decode(self.secret)
+			self.secret = base64.b64decode(self.secret).decode()
 		elif stype == asyauthSecret.PWHEX:
 			self.stype = asyauthSecret.PASSWORD
-			self.secret = bytes.fromhex(self.secret)
+			self.secret = bytes.fromhex(self.secret).decode()
 		elif stype == asyauthSecret.PWPROMPT:
 			import getpass
 			self.stype = asyauthSecret.PASSWORD
@@ -150,7 +150,9 @@ class UniCredential:
 				stype, 
 				target = target, 
 				altname = extra['altname'], 
-				altdomain = extra['altdomain'], 
+				altdomain = extra['altdomain'],
+				certdata=extra['certdata'],
+				keydata=extra['keydata'],
 				etypes = etypes, 
 				subprotocol = subprotocol
 			)
@@ -248,6 +250,65 @@ class UniCredential:
 		from asyauth.common.credentials.credssp import CREDSSPCredential
 		credobj = UniCredential.get_sspi(authtype)
 		return CREDSSPCredential([credobj])
+	
+	@staticmethod
+	def get_help(protocol:str = '', authprotos:str = '', extraparams:str = ''):
+		"""Returns user help regarding the credential url format"""
+		template = """
+URL format:
+
+	protocol+authproto-secrettype://[domain]\\username:secret@[ip|hostname]:[port]/?param1=value1&param2=value2
+
+protocol: The protocol to use (see below)
+	%s
+authproto (protocol dependent): 
+	%s
+username: The username to authenticate with
+secret: The secret to authenticate with (depends on secrettype)
+domain: The domain of the user
+secrettype: The type of the secret (see below)
+	password/pw/pass: A plaintext password
+	pwb64: A base64 encoded password
+	pwprompt: Password will be prompted for on STDIN
+	pwhex: A hex encoded password
+	nt: NT hash
+	==== Kerberos only ====
+	rc4: RC4 key (Kerberos only)
+	aes: AES key (any size, Kerberos only)
+	aes128: AES128 key (Kerberos only)
+	aes256: AES256 key (Kerberos only)
+	ccache: ccache file name (only local directory)
+	ccachehex: A hex encoded ccache file
+	ccacheb64: A base64 encoded ccache file
+	keytab: keytab file name (only local directory)
+	keytabhex: A hex encoded keytab file
+	keytabb64: A base64 encoded keytab file
+	pfx: pfx file name (only local directory)
+	pfxhex: A hex encoded pfx file
+	pfxb64: A base64 encoded pfx file
+	pem: pem file name (only local directory)
+	pemhex: A hex encoded pem file
+	pemb64: A base64 encoded pem file
+	certstore: Use Windows certificate store (Windows only, Kerberos only)
+	kirbi: kirbi file name (only local directory)
+	kirbihex: A hex encoded kirbi file
+	kirbib64: A base64 encoded kirbi file
+	==== SSH Only ====
+	sshprivkey: ssh private key file name (only local directory)
+	sshprivkeystr: ssh private key file data in string format
+	sshprivkeyb64: A base64 encoded ssh private key file
+
+Extra parameters are in the form of param=value. The following parameters are supported:
+	altname: Alternative name for certificate authentication
+	altdomain: Alternative domain for certificate authentication
+	etype: Supported encryption type to use (Kerberos only)
+	dc: The domain controller to use (Kerberos only)
+	dns: Don't use this.
+	%s
+"""
+		return template % (protocol, authprotos, extraparams)
+		#add examples
+
 
 
 from asyauth.common.credentials.credssp import CREDSSPCredential
