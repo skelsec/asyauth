@@ -1,7 +1,9 @@
-from asyauth import logger
-from asyauth.protocols.ntlm.client.native import NTLMClientNative
 from wsnet.operator.sspiproxy import WSNETSSPIProxy
+from wsnet.operator.sspiproxy import WSNETSSPIProxy
+
 from asyauth.common.winapi.constants import ISC_REQ
+from asyauth.protocols.ntlm.client.native import NTLMClientNative
+
 
 class NTLMClientSSPIProxy:
 	def __init__(self, credential):
