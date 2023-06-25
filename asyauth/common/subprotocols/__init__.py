@@ -16,13 +16,16 @@ class SubProtocol:
 			return SubProtocolSSPIProxy.from_url_params(query_params)
 		if subprotocol == asyauthSubProtocol.WSNET:
 			return SubProtocolWSNet.from_url_params(query_params)
+		if subprotocol == asyauthSubProtocol.WSNETDIRECT:
+			return SubProtocolWSNetDirect.from_url_params(query_params)
 		raise Exception("asyauth unknown subprotocol %s" % subprotocol)
 
 from asyauth.common.subprotocols.native import SubProtocolNative
 from asyauth.common.subprotocols.sspi import SubProtocolSSPI
 from asyauth.common.subprotocols.sspiproxy import SubProtocolSSPIProxy
 from asyauth.common.subprotocols.wsnet import SubProtocolWSNet
+from asyauth.common.subprotocols.wsnetdirect import SubProtocolWSNetDirect
 
 
-__all__ = ['SubProtocolNative', 'SubProtocolSSPI', 'SubProtocolSSPIProxy', 'SubProtocolWSNet']
+__all__ = ['SubProtocolNative', 'SubProtocolSSPI', 'SubProtocolSSPIProxy', 'SubProtocolWSNet', 'SubProtocolWSNetDirect']
 

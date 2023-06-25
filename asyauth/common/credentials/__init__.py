@@ -135,7 +135,7 @@ class UniCredential:
 			proxies = None
 			if proxy_present is True:
 				from asysocks.unicomm.common.proxy import UniProxyTarget
-				proxies = UniProxyTarget.from_url_params(connection_url, endpoint_port=88)
+				proxies = UniProxyTarget.from_url_params(url_e.query, url_e.hostname,endpoint_port=88)
 
 			target = None
 			if extra['dc'] is not None:
