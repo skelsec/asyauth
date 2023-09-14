@@ -29,10 +29,6 @@ class SPNEGOClientNative:
 	
 	def get_copy(self):
 		return self.credential.build_context()
-		#spnego = SPNEGOClientNative()
-		#for ctx_name in self.list_original_conexts():
-		#	spnego.add_auth_context(ctx_name, self.get_original_context(ctx_name))
-		#return spnego
 
 	def get_internal_seq(self):
 		return self.internal_seq
@@ -215,7 +211,7 @@ class SPNEGOClientNative:
 			#everything is netotiated, but authentication needs more setps
 			neg_token_raw = NegotiationToken.load(token)
 			neg_token = neg_token_raw.native
-			if neg_token['negState'] == 'accept-completed':
+			if neg_token['negState'] == 'accept-completed' and neg_token['responseToken'] is None:
 				return None, False, None
 			if neg_token['responseToken'] is None:
 				# https://tools.ietf.org/html/rfc4178#section-5
@@ -248,6 +244,8 @@ class SPNEGOClientNative:
 					self.internal_seq += 1
 				res = NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump()
 
+				if neg_token['negState'] == 'accept-completed':
+					return None, False, None
 				return res, to_continue, None
 	
 def test():

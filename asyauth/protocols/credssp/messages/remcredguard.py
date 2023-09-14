@@ -18,6 +18,7 @@ typedef struct _NTLM_REMOTE_SUPPLEMENTAL_CREDENTIAL {
 
 """
 import enum
+import io
 
 class MSV1_0_CREDENTIAL_KEY_TYPE(enum.Enum):
 	InvalidCredKey = 0 #        // reserved 

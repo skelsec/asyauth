@@ -1,5 +1,6 @@
 import os
-from asyauth import logger
+from asyauth.protocols.ntlm import logger
+
 from asyauth.protocols.ntlm.client.native import NTLMClientNative
 from asyauth.common.winapi.constants import ISC_REQ
 
