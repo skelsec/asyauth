@@ -155,11 +155,12 @@ class CredSSPClientNative:
 			# In some cases (like RDP) the certificate is provided by the RDP serrver, but this means that CredSSP will not support encryption/decryption in this level
 			# In other cases (like WinRM) the certificate is not provided by the upper layer, and CredSSP will need to create an  SSL tunnel itself. In this case support encryption/decryption in this level
 
-			if certificate is not None and self.__pubkey is None:
-				self.__pubkey = CredSSPClientNative.certificate_to_pubkey(certificate)
-			elif self.__internal_ssl_tunnel is None:
-				logger.debug('CredSSP - creating internal SSL tunnel, as no certificate was provided')
-				self.__internal_ssl_tunnel = SSLTunnel()
+			if self.__pubkey is None:
+				if certificate is not None:
+					self.__pubkey = CredSSPClientNative.certificate_to_pubkey(certificate)
+				elif self.__internal_ssl_tunnel is None:
+					logger.debug('CredSSP - creating internal SSL tunnel, as no certificate was provided')
+					self.__internal_ssl_tunnel = SSLTunnel()
 			
 			if self.__internal_ssl_tunnel is not None:
 				ssldata = self.__internal_ssl_tunnel.data_in(token)
