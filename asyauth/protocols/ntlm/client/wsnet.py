@@ -41,12 +41,13 @@ class NTLMClientWSNET:
 	def is_extended_security(self):
 		return self.ntlm_ctx.is_extended_security()
 	
-	async def authenticate(self, authData = b'', flags = None, seq_number = 0, is_rpc = False):
+	#async def authenticate(self, authData = b'', flags = None, seq_number = 0, is_rpc = False):
+	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None):
 		try:
-			if is_rpc is True and flags is None:
-				flags = ISC_REQ.REPLAY_DETECT | ISC_REQ.CONFIDENTIALITY| ISC_REQ.USE_SESSION_KEY| ISC_REQ.INTEGRITY| ISC_REQ.SEQUENCE_DETECT| ISC_REQ.CONNECTION
-			elif flags is None:
-				flags = ISC_REQ.CONNECTION
+			#if is_rpc is True and flags is None:
+			#	flags = ISC_REQ.REPLAY_DETECT | ISC_REQ.CONFIDENTIALITY| ISC_REQ.USE_SESSION_KEY| ISC_REQ.INTEGRITY| ISC_REQ.SEQUENCE_DETECT| ISC_REQ.CONNECTION
+			#elif flags is None:
+			#	flags = ISC_REQ.CONNECTION
 
 			if authData is None:
 				status, ctxattr, data, err = await self.sspi.authenticate('NTLM', '', '', 3, flags.value, authdata = b'')

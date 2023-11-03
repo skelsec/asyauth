@@ -1,74 +1,11 @@
 
-import enum
-
 from minikerberos.gssapi.gssapi import get_gssapi, GSSWrapToken
-from minikerberos.protocol.asn1_structs import AP_REQ, AP_REP, TGS_REP
-from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
+from minikerberos.protocol.asn1_structs import AP_REP
+from minikerberos.protocol.encryption import Key
 from wsnet.clientauth import WSNETAuth
 from asyauth.common.winapi.constants import ISC_REQ
 
-import enum
-import io
-import os
 
-from asn1crypto.core import ObjectIdentifier
-
-class KRB5_MECH_INDEP_TOKEN:
-	# https://tools.ietf.org/html/rfc2743#page-81
-	# Mechanism-Independent Token Format
-
-	def __init__(self, data, oid, remlen = None):
-		self.oid = oid
-		self.data = data
-
-		#dont set this
-		self.length = remlen
-	
-	@staticmethod
-	def from_bytes(data):
-		return KRB5_MECH_INDEP_TOKEN.from_buffer(io.BytesIO(data))
-	
-	@staticmethod
-	def from_buffer(buff):
-		
-		start = buff.read(1)
-		if start != b'\x60':
-			raise Exception('Incorrect token data!')
-		remaining_length = KRB5_MECH_INDEP_TOKEN.decode_length_buffer(buff)
-		token_data = buff.read(remaining_length)
-		
-		buff = io.BytesIO(token_data)
-		pos = buff.tell()
-		buff.read(1)
-		oid_length = KRB5_MECH_INDEP_TOKEN.decode_length_buffer(buff)
-		buff.seek(pos)
-		token_oid = ObjectIdentifier.load(buff.read(oid_length+2))
-		
-		return KRB5_MECH_INDEP_TOKEN(buff.read(), str(token_oid), remlen = remaining_length)
-		
-	@staticmethod
-	def decode_length_buffer(buff):
-		lf = buff.read(1)[0]
-		if lf <= 127:
-			length = lf
-		else:
-			bcount = lf - 128
-			length = int.from_bytes(buff.read(bcount), byteorder = 'big', signed = False)
-		return length
-		
-	@staticmethod
-	def encode_length(length):
-		if length <= 127:
-			return length.to_bytes(1, byteorder = 'big', signed = False)
-		else:
-			lb = length.to_bytes((length.bit_length() + 7) // 8, 'big')
-			return (128+len(lb)).to_bytes(1, byteorder = 'big', signed = False) + lb
-		
-		
-	def to_bytes(self):
-		t = ObjectIdentifier(self.oid).dump() + self.data
-		t = b'\x60' + KRB5_MECH_INDEP_TOKEN.encode_length(len(t)) + t
-		return t[:-len(self.data)] , self.data
 
 class KerberosClientWSNET:
 	def __init__(self, settings):

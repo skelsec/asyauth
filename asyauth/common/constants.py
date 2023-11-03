@@ -16,6 +16,7 @@ class asyauthSubProtocol(enum.Enum):
 	NATIVE = 'NATIVE'
 	SSPI = 'SSPI'
 	WSNET = 'WSNET'
+	WSNETDIRECT = 'WSNETDIRECT'
 	SSPIPROXY = 'SSPIPROXY'
 	CUSTOM = 'CUSTOM'
 

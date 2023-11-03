@@ -431,6 +431,20 @@ class GSSWrapToken:
 			t += self.Data
 		
 		return t
+	
+	def __str__(self):
+		t  = 'GSSWrapToken\r\n'
+		t += 'TOK_ID : %s\r\n' % self.TOK_ID.hex()
+		t += 'Flags : %s\r\n' % self.Flags
+		t += 'Filler : %s\r\n' % self.Filler.hex()
+		t += 'EC : %s\r\n' % self.EC
+		t += 'RRC : %s\r\n' % self.RRC
+		t += 'SND_SEQ : %s\r\n' % self.SND_SEQ
+		if self.Data is not None:
+			t += 'Data : %s\r\n' % self.Data.hex()
+		else:
+			t += 'Data : None\r\n'
+		return t
 		
 class GSSAPI_AES:
 	def __init__(self, session_key, cipher_type, checksum_profile):

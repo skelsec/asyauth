@@ -156,6 +156,9 @@ class KerberosCredential(UniCredential):
 		elif self.subprotocol.type == asyauthSubProtocol.WSNET:
 			from asyauth.protocols.kerberos.client.wsnet import KerberosClientWSNET
 			return KerberosClientWSNET(self)
+		elif self.subprotocol.type == asyauthSubProtocol.WSNETDIRECT:
+			from asyauth.protocols.kerberos.client.wsnetdirect import KerberosClientWSNETDirect
+			return KerberosClientWSNETDirect(self)
 		elif self.subprotocol.type == asyauthSubProtocol.CUSTOM:
 			return self.subprotocol.factoryobj.build_context(self)
 		else:
