@@ -144,7 +144,14 @@ class KerberosClientNative:
 					
 					self.from_ccache = True
 				except:
+					# fetching TGT
 					tgt = await self.kc.get_TGT(override_etype = self.credential.etypes)
+					# if the target server is in a different domain, we need to get a referral ticket
+					if self.credential.cross_target is not None:
+						# cross-domain kerberos
+						ref_tgs, ref_encpart, ref_key, new_factory = await self.kc.get_referral_ticket(self.credential.cross_realm, self.credential.cross_target.get_ip_or_hostname())
+						self.kc = new_factory.get_client()
+						spn.domain = self.credential.cross_realm
 					tgs, encpart, self.session_key = await self.kc.get_TGS(spn)#, override_etype = self.preferred_etypes)
 				
 				logger.debug('TGS: %s' % tgs)

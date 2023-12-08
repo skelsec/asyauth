@@ -5,12 +5,13 @@ from asyauth.common.subprotocols import SubProtocol
 from asyauth.common.subprotocols import SubProtocolNative
 from asysocks.unicomm.common.target import UniTarget
 from minikerberos.common.creds import KerberosCredential as KCRED
-from minikerberos.pkinit import PKINIT
 from asyauth.utils.paramprocessor import str_one, int_one, bool_one, int_list
 
+# another hidden import because of oscrypto
+#from minikerberos.pkinit import PKINIT
 
 class KerberosCredential(UniCredential):
-	def __init__(self, secret, username, domain, stype:asyauthSecret, target:UniTarget = None, altname:str = None, altdomain:str = None, etypes:List[int] = [23,17,18], subprotocol:SubProtocol = SubProtocolNative(), certdata:str = None, keydata:str=None):
+	def __init__(self, secret, username, domain, stype:asyauthSecret, target:UniTarget = None, altname:str = None, altdomain:str = None, etypes:List[int] = [23,17,18], subprotocol:SubProtocol = SubProtocolNative(), certdata:str = None, keydata:str=None, cross_target:UniTarget = None, cross_realm:str = None):
 		UniCredential.__init__(
 			self, 
 			secret = secret,
@@ -26,6 +27,8 @@ class KerberosCredential(UniCredential):
 		self.target = target
 		self.certdata = certdata #can be file path or cert data
 		self.keydata = keydata #can be file path or cert data
+		self.cross_target = cross_target #used for cross-domain kerberos
+		self.cross_realm = cross_realm #used for cross-domain kerberos
 
 		self.dh_params = {
 				'p' : int('00ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece65381ffffffffffffffff', 16),
@@ -43,7 +46,10 @@ class KerberosCredential(UniCredential):
 		if self.target is None or self.target.dc_ip is None:
 			raise Exception('Kerberos credential target must have dc_ip set!')		
 
-	def get_pkinit(self) -> PKINIT:
+	def get_pkinit(self):
+		# hidden import
+		from minikerberos.pkinit import PKINIT
+
 		if self.stype == asyauthSecret.CERTSTORE:
 			return PKINIT.from_windows_certstore(self.settings.pfx12_file, certstore_name = 'MY', cert_serial = None, dh_params = self.dh_params, is_azure = self.is_azure)
 		else:
@@ -55,8 +61,11 @@ class KerberosCredential(UniCredential):
 			'altname' : str_one,
 			'altdomain' : str_one,
 			'etype' : int_list,
-			'dc' : str_one,
+			'dc' : str_one, #domain controller IP
+			'dcc': str_one, #corss-domain DC IP
 			'dns' : str_one,
+			'dnsc' : str_one,
+			'realmc' : str_one,
 			'certdata':str_one,
 			'keydata':str_one,
 		}

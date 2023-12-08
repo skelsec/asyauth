@@ -36,7 +36,10 @@ class UniCredential:
 		return {
 			'timeout' : int_one,
 			'dns' : str_one,
+			'dnsc' : str_one, #cross-domain DNS
 			'dc' : str_one,
+			'dcc' : str_one, #cross-domain DC IP
+			'realmc' : str_one, #cross-domain realm
 		}
 
 	@staticmethod
@@ -141,6 +144,10 @@ class UniCredential:
 			if extra['dc'] is not None:
 				target = UniTarget(extra['dc'], 88, UniProto.CLIENT_TCP, proxies = proxies, dns=params['dns'], dc_ip=extra['dc'])
 
+			cross_target = None
+			if extra['dcc'] is not None:
+				cross_target = UniTarget(extra['dcc'], 88, UniProto.CLIENT_TCP, proxies = proxies, dns=params['dnsc'], dc_ip=extra['dcc'])
+
 			etypes = extra['etype'] if extra['etype'] is not None else [23,17,18]
 
 			return credobj(
@@ -154,7 +161,9 @@ class UniCredential:
 				certdata=extra['certdata'],
 				keydata=extra['keydata'],
 				etypes = etypes, 
-				subprotocol = subprotocol
+				subprotocol = subprotocol,
+				cross_target = cross_target,
+				cross_realm = extra['realmc'],
 			)
 		else:
 			return UniCredential(
