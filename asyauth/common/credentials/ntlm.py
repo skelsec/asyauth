@@ -64,7 +64,7 @@ class NTLMCredential(UniCredential):
 
 		}
 	
-	def build_context(self):
+	def build_context(self, *args, **kwargs):
 		if self.subprotocol.type == asyauthSubProtocol.NATIVE:
 			from asyauth.protocols.ntlm.client.native import NTLMClientNative
 			return NTLMClientNative(self)

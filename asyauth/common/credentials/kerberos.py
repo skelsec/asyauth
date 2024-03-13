@@ -149,7 +149,7 @@ class KerberosCredential(UniCredential):
 
 		return res
 
-	def build_context(self):
+	def build_context(self, *args, **kwargs):
 		if self.subprotocol.type == asyauthSubProtocol.NATIVE:
 			from asyauth.protocols.kerberos.client.native import KerberosClientNative
 			return KerberosClientNative(self)

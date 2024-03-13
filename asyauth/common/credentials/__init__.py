@@ -1,5 +1,6 @@
 import base64
 import platform
+import copy
 from urllib.parse import urlparse, parse_qs
 from asyauth.utils.paramprocessor import str_one, int_one, bool_one
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol
@@ -27,10 +28,56 @@ class UniCredential:
 			self.stype = asyauthSecret.PASSWORD
 			self.secret = getpass.getpass('Enter password: ')
 	
-	def build_context(self):
-		# override this function
-		raise NotImplementedError()
-
+	def build_context(self, protocol=None, target = None, **kwargs):
+		if protocol is None:
+			protocol = self.protocol
+		
+		if protocol == asyauthProtocol.NTLM:
+			if self.subprotocol.type == asyauthSubProtocol.NATIVE:
+				from asyauth.common.credentials.ntlm import NTLMCredential
+				return NTLMCredential(self.secret, self.username, self.domain, self.stype, subprotocol=self.subprotocol, **kwargs).build_context()
+			else:
+				raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
+		
+		elif protocol == asyauthProtocol.KERBEROS:
+			if self.subprotocol.type == asyauthSubProtocol.NATIVE:
+				from asyauth.common.credentials.kerberos import KerberosCredential
+				return KerberosCredential(
+					self.secret, 
+					self.username, 
+					self.domain, 
+					self.stype, 
+					subprotocol=self.subprotocol, 
+					target=target, 
+					**kwargs
+				).build_context()
+			else:
+				raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
+		
+		elif protocol == asyauthProtocol.SPNEGO:
+			if self.subprotocol.type == asyauthSubProtocol.NATIVE:
+				from asyauth.common.credentials.spnego import SPNEGOCredential
+				return SPNEGOCredential([self.build_context(target=target, **kwargs)], subprotocol=self.subprotocol).build_context()
+			else:
+				raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
+		
+		elif protocol == asyauthProtocol.SPNEGOEX:
+			if self.subprotocol.type == asyauthSubProtocol.NATIVE:
+				from asyauth.common.credentials.spnegoex import SPNEGOEXCredential
+				return SPNEGOEXCredential([self.build_context(target=target, **kwargs)], subprotocol=self.subprotocol).build_context()
+			else:
+				raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
+		
+		elif protocol == asyauthProtocol.CREDSSP:
+			if self.subprotocol.type == asyauthSubProtocol.NATIVE:
+				from asyauth.common.credentials.credssp import CREDSSPCredential
+				return CREDSSPCredential([self.build_context(target=target, **kwargs)], subprotocol=self.subprotocol).build_context()
+			else:
+				raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
+		
+		else:
+			return copy.deepcopy(self)
+		
 	@staticmethod
 	def get_url_params():
 		return {
