@@ -57,6 +57,16 @@ class NTLMCredential(UniCredential):
 		self.challenge = None # none -> it will generate a random challenge for the context
 		self.timestamp = None
 		self.session_key = None
+	
+	@staticmethod
+	def create_guest():
+		return NTLMCredential(
+			secret = None,
+			username= 'Guest',
+			domain = None,
+			stype = asyauthSecret.PASSWORD,
+			subprotocol = SubProtocolNative()
+		)
 			
 	@staticmethod
 	def get_url_params():
