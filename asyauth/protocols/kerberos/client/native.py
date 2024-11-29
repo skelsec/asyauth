@@ -139,7 +139,9 @@ class KerberosClientNative:
 					for target in self.ccred.ccache.list_targets():
 						# just printing this to debug...
 						logger.debug('CCACHE SPN record: %s' % target)
-					tgs, encpart, self.session_key = await self.kc.get_TGS(spn)
+					tgs, encpart, self.session_key, err = self.kc.tgs_from_ccache(spn)
+					if err:
+						raise err
 					logger.debug('Got TGS from CCACHE!')
 					
 					self.from_ccache = True
