@@ -258,7 +258,7 @@ class CredSSPClientNative:
 						if verification_data != ClientServerHash:
 							raise Exception('CredSSP - Server verification failed!')
 					elif self.version in [2,3,4]:
-						if verification_data != self.__pubkey:
+						if verification_data[1:] != self.__pubkey[1:]:
 							raise Exception('CredSSP - Server verification failed!')
 					
 					# Signatures verified, now we can send the final auth token with the password
