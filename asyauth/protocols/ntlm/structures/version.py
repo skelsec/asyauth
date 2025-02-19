@@ -46,7 +46,7 @@ class Version:
 		self.WindowsProduct = None
 		
 	@staticmethod
-	def construct(major = WindowsMajorVersion.WINDOWS_MAJOR_VERSION_10, minor = WindowsMinorVersion.WINDOWS_MINOR_VERSION_0, build = 1555 ):
+	def construct(major = WindowsMajorVersion.WINDOWS_MAJOR_VERSION_10, minor = WindowsMinorVersion.WINDOWS_MINOR_VERSION_0, build = 15063 ):
 		v = Version()
 		v.ProductMajorVersion = major
 		v.ProductMinorVersion = minor

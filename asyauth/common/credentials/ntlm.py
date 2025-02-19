@@ -7,6 +7,8 @@ from asyauth.common.subprotocols import SubProtocolNative
 from asyauth.protocols.ntlm.structures.version import Version, WindowsMajorVersion, WindowsMinorVersion
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 
+from asyauth.utils.paramprocessor import str_one, int_one, bool_one, int_list
+
 ASYAUTH_NTLMCRED_SUPPORTED_STYPE = [
 	asyauthSecret.PASSWORD,
 	asyauthSecret.PASS,
@@ -15,8 +17,21 @@ ASYAUTH_NTLMCRED_SUPPORTED_STYPE = [
 	asyauthSecret.NT,
 	asyauthSecret.RC4
 ]
+
+NTLM_URL_PARAMS = {
+	'ntlmnosig' : bool_one,
+	'ntlmworkstation' : str_one,
+	'ntlmdomain' : str_one,
+	'ntlmflags' : int_one,
+	'ntlmversionmajor' : int_one,
+	'ntlmversionminor' : int_one,
+	'ntlmversionbuild' : int_one,
+}
+
+
+
 class NTLMCredential(UniCredential):
-	def __init__(self, secret, username, domain, stype:asyauthSecret, subprotocol:SubProtocol = SubProtocolNative()):
+	def __init__(self, secret, username, domain, stype:asyauthSecret, subprotocol:SubProtocol = SubProtocolNative(), **kwargs):
 		UniCredential.__init__(
 			self, 
 			secret = secret,
@@ -32,10 +47,11 @@ class NTLMCredential(UniCredential):
 		if isinstance(self.subprotocol, SubProtocolNative) and self.stype not in ASYAUTH_NTLMCRED_SUPPORTED_STYPE:
 			raise Exception('Unsupported Secret Type for NTLM auth: %s' % self.stype)
 		
-		self.is_guest = False
-		self.negotiate_workstation = None
-		self.negotiate_domain = None
+		
+		self.negotiate_workstation = kwargs.get('ntlmworkstation')
+		self.negotiate_domain = kwargs.get('ntlmdomain')
 		self.ntlm_version = 2
+		self.is_guest = False
 		self.flags = NegotiateFlags.NEGOTIATE_KEY_EXCH|\
 			NegotiateFlags.NEGOTIATE_128|\
 			NegotiateFlags.NEGOTIATE_VERSION|\
@@ -46,11 +62,36 @@ class NTLMCredential(UniCredential):
 			NegotiateFlags.NEGOTIATE_SEAL|\
 			NegotiateFlags.REQUEST_TARGET|\
 			NegotiateFlags.NEGOTIATE_UNICODE
-			
+		
+		if kwargs.get('ntlmflags') is not None:
+			self.flags = NegotiateFlags(int(kwargs.get('ntlmflags')))
+		
+		if kwargs.get('ntlmnosig', False) is True:
+			self.flags = NegotiateFlags.NEGOTIATE_KEY_EXCH|\
+				NegotiateFlags.NEGOTIATE_128|\
+				NegotiateFlags.NEGOTIATE_VERSION|\
+				NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY|\
+				NegotiateFlags.NEGOTIATE_NTLM|\
+				NegotiateFlags.REQUEST_TARGET|\
+				NegotiateFlags.NEGOTIATE_UNICODE
+
+		
+		self.ntlmversionmajor = WindowsMajorVersion.WINDOWS_MAJOR_VERSION_10
+		self.ntlmversionminor = WindowsMinorVersion.WINDOWS_MINOR_VERSION_0
+		self.ntlmversionbuild = 15063
+
+		if kwargs.get('ntlmversionmajor') is not None:
+			self.ntlmversionmajor = WindowsMajorVersion(int(kwargs.get('ntlmversionmajor')))
+		
+		if kwargs.get('ntlmversionminor') is not None:
+			self.ntlmversionmajor = WindowsMinorVersion(int(kwargs.get('ntlmversionminor')))
+
+		if kwargs.get('ntlmversionbuild') is not None:
+			self.ntlmversionbuild = kwargs.get('ntlmversionbuild')
 		self.negotiate_version = Version.construct(
-			WindowsMajorVersion.WINDOWS_MAJOR_VERSION_10, 
-			minor = WindowsMinorVersion.WINDOWS_MINOR_VERSION_0, 
-			build = 15063 
+			self.ntlmversionmajor, 
+			minor = self.ntlmversionminor, 
+			build = self.ntlmversionbuild
 		)
 
 		### these fields are for testing!
@@ -70,9 +111,7 @@ class NTLMCredential(UniCredential):
 			
 	@staticmethod
 	def get_url_params():
-		return {
-
-		}
+		return NTLM_URL_PARAMS
 	
 	def build_context(self, *args, **kwargs):
 		if self.subprotocol.type == asyauthSubProtocol.NATIVE:

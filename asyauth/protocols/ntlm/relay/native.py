@@ -9,12 +9,10 @@ from asyauth import logger
 from asyauth.common.credentials.ntlm import NTLMCredential
 from asyauth.protocols.ntlm.structures.serverinfo import NTLMServerInfo
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
-from asyauth.protocols.ntlm.structures.ntlmssp_message_signature import NTLMSSP_MESSAGE_SIGNATURE
-from asyauth.protocols.ntlm.structures.ntlmssp_message_signature_noext import NTLMSSP_MESSAGE_SIGNATURE_NOEXT
 from asyauth.protocols.ntlm.messages.negotiate import NTLMNegotiate
 from asyauth.protocols.ntlm.messages.challenge import NTLMChallenge
 from asyauth.protocols.ntlm.messages.authenticate import NTLMAuthenticate
-from asyauth.protocols.ntlm.creds_calc import netntlmv2, AVPAIRType, LMResponse, netntlm, netntlm_ess
+from asyauth.protocols.ntlm.creds_calc import NTLMCredentials
 from asyauth.protocols.ntlm.structures.avpair import MsvAvFlags, AVPAIRType, AVPair
 from asyauth.protocols.ntlm.structures.challenge_response import NTLMv2Response
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
@@ -33,6 +31,7 @@ class NTLMRelaySettings:
 		self.modify_negotiate_cb = None
 		self.modify_challenge_cb = None
 		self.modify_authenticate_cb = None
+		self.timeout = 20
 
 class NTLMRelayHandler:
 	def __init__(self, settings = None):
@@ -132,6 +131,8 @@ class NTLMRelayHandler:
 		if self.ntlmChallenge is None:
 			return None
 		self.extra_info = NTLMServerInfo.from_challenge(self.ntlmChallenge)
+		creds = NTLMCredentials.construct(self.ntlmNegotiate, self.ntlmChallenge, self.ntlmAuthenticate)
+		self.extra_info.creds = creds[0]
 		return self.extra_info
 		
 	def MAC(self, handle, signingKey, seqNum, message):
@@ -375,7 +376,7 @@ class NTLMRelayHandler:
 				self.start_client_evt.set()
 				await self.log_async(logging.DEBUG, '[SRV] Waiting for challenge...')
 				await self.spnego_obj.notify_relay('NTLM') # notify the client that we're ready to relay
-				await self.challenge_evt.wait()
+				await asyncio.wait_for(self.challenge_evt.wait(), self.settings.timeout)
 				await self.log_async(logging.DEBUG, '[SRV] Challenge in!')
 				return self.ntlmChallenge_server_raw, True, None
 			
@@ -387,7 +388,6 @@ class NTLMRelayHandler:
 				return None, True, None
 		
 		except Exception as e:
-			traceback.print_exc()
 			return None, False, e
 
 	async def authenticate(self, authData, flags = None, cb_data = None, spn=None):

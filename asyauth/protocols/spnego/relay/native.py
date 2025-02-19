@@ -27,6 +27,7 @@ class SPNEGORelay:
 		self.__server_latest_token = None
 		self.__relay_queue_notified = False
 		self.__authtype = None
+		self.connection_info = None
 	
 	def setup(self, log_q = None):
 		for k in self.authentication_contexts:
@@ -39,6 +40,9 @@ class SPNEGORelay:
 			await self.auth_relay_queue.put(self)
 			self.__relay_queue_notified = True
 
+	def set_connection_info(self, connection_info):
+		self.connection_info = connection_info
+		
 	def is_guest(self):
 		if self.selected_authentication_context is None:
 			raise Exception('Call this after selecting auth method!')

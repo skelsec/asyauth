@@ -7,13 +7,14 @@ from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubP
 from asyauth.common.subprotocols import SubProtocol, SubProtocolNative, SubProtocolSSPI
 
 class UniCredential:
-	def __init__(self, secret:str = None, username:str = None, domain:str = None, stype:asyauthSecret = asyauthSecret.NONE, protocol:asyauthProtocol = None, subprotocol:SubProtocol = SubProtocolNative()):
+	def __init__(self, secret:str = None, username:str = None, domain:str = None, stype:asyauthSecret = asyauthSecret.NONE, protocol:asyauthProtocol = None, subprotocol:SubProtocol = SubProtocolNative(), **kwargs):
 		self.domain = domain
 		self.username = username
 		self.secret = secret
 		self.stype = stype
 		self.protocol = protocol
 		self.subprotocol = subprotocol
+		self.metadata = kwargs
 
 		if stype in [asyauthSecret.PASS, asyauthSecret.PW]:
 			self.stype = asyauthSecret.PASSWORD
@@ -176,6 +177,7 @@ class UniCredential:
 				domain,
 				stype,
 				subprotocol=subprotocol,
+				**extra
 			)
 			if protocol == asyauthProtocol.SICILY:
 				res.protocol = asyauthProtocol.SICILY

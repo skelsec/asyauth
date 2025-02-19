@@ -9,6 +9,22 @@ from asyauth.protocols.ntlm.structures.challenge_response import *
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 from asyauth.common.credentials.ntlm import NTLMCredential
 
+class Credential:
+	def __init__(self, ctype, username=None, domain=None, fullhash = None):
+		self.ctype = ctype
+		self.domain = domain
+		self.username = username
+		self.fullhash = fullhash
+	
+	def to_dict(self):
+		return {
+			'ctype': self.ctype,
+			'username': self.username,
+			'domain': self.domain,
+			'fullhash': self.fullhash
+		}
+
+
 class NTLMCredentials:
 	@staticmethod
 	def construct(ntlmNegotiate, ntlmChallenge, ntlmAuthenticate):
@@ -17,12 +33,26 @@ class NTLMCredentials:
 		if isinstance(ntlmAuthenticate.NTChallenge, NTLMv2Response):
 		#if ntlmAuthenticate._use_NTLMv2:
 			# this is a netNTLMv2 then, otherwise auth would have failed on protocol level
-			creds = netntlmv2()
-			creds.username = ntlmAuthenticate.UserName
-			creds.domain   = ntlmAuthenticate.DomainName
-			creds.ServerChallenge = ntlmChallenge.ServerChallenge
-			creds.ClientResponse  = ntlmAuthenticate.NTChallenge.Response
-			creds.ChallengeFromClinet = ntlmAuthenticate.NTChallenge.ChallengeFromClinet_hex
+			#creds = netntlmv2()
+			#creds.username = ntlmAuthenticate.UserName
+			#creds.domain   = ntlmAuthenticate.DomainName
+			#creds.ServerChallenge = ntlmChallenge.ServerChallenge
+			#creds.ClientResponse  = ntlmAuthenticate.NTChallenge.Response
+			#creds.ChallengeFromClinet = ntlmAuthenticate.NTChallenge.ChallengeFromClinet.to_bytes().hex()
+			#
+
+			creds = Credential(
+				'netNTLMv2',
+				username = ntlmAuthenticate.UserName,
+				domain = ntlmAuthenticate.DomainName,
+				fullhash = '%s::%s:%s:%s:%s' % (
+					ntlmAuthenticate.UserName, 
+					ntlmAuthenticate.DomainName, 
+					ntlmChallenge.ServerChallenge.hex(), 
+					ntlmAuthenticate.NTChallenge.Response.hex(), 
+					ntlmAuthenticate.NTChallenge.ChallengeFromClinet.to_bytes().hex())
+			)
+				
 
 			creds2 = netlmv2()
 			creds2.username = ntlmAuthenticate.UserName
@@ -30,6 +60,7 @@ class NTLMCredentials:
 			creds2.ServerChallenge = ntlmChallenge.ServerChallenge
 			creds2.ClientResponse  = ntlmAuthenticate.LMChallenge.Response
 			creds2.ChallengeFromClinet = ntlmAuthenticate.LMChallenge.ChallengeFromClinet
+			creds2 = creds2.to_credential()
 			return [creds, creds2]
 
 		else:
@@ -43,7 +74,7 @@ class NTLMCredentials:
 				creds.ClientResponse  = ntlmAuthenticate.NTChallenge.Response
 				creds.ChallengeFromClinet = ntlmAuthenticate.LMChallenge.Response
 
-				return [creds]
+				return [creds.to_credential()]
 
 			else:
 				creds = netntlm()
@@ -54,7 +85,7 @@ class NTLMCredentials:
 				
 				if ntlmAuthenticate.NTChallenge.Response == ntlmAuthenticate.LMChallenge.Response:
 					# the the two responses are the same, then the client did not send encrypted LM hashes, only NT
-					return [creds]
+					return [creds.to_credential()]
 					
 
 				# CAME FOR COPPER, FOUND GOLD!!!!!
@@ -64,7 +95,7 @@ class NTLMCredentials:
 				creds2.domain   = ntlmAuthenticate.DomainName
 				creds2.ServerChallenge = ntlmChallenge.ServerChallenge
 				creds2.ClientResponse  = ntlmAuthenticate.LMChallenge.Response
-				return [creds2, creds]
+				return [creds2.to_credential(), creds.to_credential()]
 
 class netlm:
 	# not supported by hashcat?

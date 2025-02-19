@@ -87,6 +87,8 @@ class AVPair:
 						  AVPAIRType.MsvAvEOL
 			]:
 			raw_data = self.data.encode('utf-16le')
+		elif self.type == AVPAIRType.MsvAvFlags:
+			raw_data = self.data.to_bytes(4, byteorder = 'little', signed = False)
 		else:
 			raw_data = self.data
 		t += len(raw_data).to_bytes(2, byteorder = 'little', signed = False)

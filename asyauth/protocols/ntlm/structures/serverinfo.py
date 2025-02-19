@@ -60,6 +60,7 @@ class NTLMServerInfo:
 		self.os_minor_version = None
 		self.os_build = None
 		self.os_guess = None
+		self.creds = None
 	
 	@staticmethod
 	def from_challenge(challenge):
@@ -111,6 +112,8 @@ class NTLMServerInfo:
 			t['os_major_version'] = self.os_major_version.name
 		if self.os_minor_version is not None:
 			t['os_minor_version'] = self.os_minor_version.name
+		if self.creds is not None:
+			t['creds'] = self.creds.to_dict()
 		return t
 
 	def to_tsv(self, separator = '\t'):
