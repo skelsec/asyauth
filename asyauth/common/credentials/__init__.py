@@ -1,7 +1,7 @@
 import base64
 import platform
 import copy
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 from asyauth.utils.paramprocessor import str_one, int_one, bool_one
 from asyauth.common.constants import asyauthSecret, asyauthProtocol, asyauthSubProtocol
 from asyauth.common.subprotocols import SubProtocol, SubProtocolNative, SubProtocolSSPI
@@ -101,6 +101,11 @@ class UniCredential:
 		protocol = asyauthProtocol.NONE
 		subprotocol = SubProtocolNative()
 		url_e = urlparse(connection_url)
+		url_dict = url_e._asdict()
+		for prop, val in url_dict.items():
+			if type(val) is str:
+				url_dict[prop] = unquote(val)
+		url_e = url_e._replace(**url_dict)
 		schemes = url_e.scheme.upper().split('+')
 		if len(schemes) == 1:
 			try:
