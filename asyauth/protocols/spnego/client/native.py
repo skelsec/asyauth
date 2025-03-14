@@ -103,7 +103,21 @@ class SPNEGOClientNative:
 		Context MUST be already set up!
 		"""
 		self.authentication_contexts[name] = ctx
-		self.original_authentication_contexts[name] = copy.deepcopy(ctx)
+		self.original_authentication_contexts[name] = self._deep_copy_context(ctx)
+
+	def _deep_copy_context(self, ctx):
+		"""
+		Create a deep copy of the context, excluding the RSAPrivateKey object which is not serializable.
+		"""
+		if hasattr(ctx, 'ccred') and hasattr(ctx.ccred, 'private_key'):
+			private_key = ctx.ccred.private_key
+			ctx.ccred.private_key = None
+			new_ctx = copy.deepcopy(ctx)
+			ctx.ccred.private_key = private_key
+			new_ctx.ccred.private_key = private_key
+		else:
+			new_ctx = copy.deepcopy(ctx)
+			return new_ctx
 		
 	def select_common_athentication_type(self, mech_types):
 		for auth_type_name in self.authentication_contexts:
