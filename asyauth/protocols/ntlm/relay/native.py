@@ -390,7 +390,7 @@ class NTLMRelayHandler:
 		except Exception as e:
 			return None, False, e
 
-	async def authenticate(self, authData, flags = None, cb_data = None, spn=None):
+	async def authenticate(self, authData, flags = None, cb_data = None, spn=None, **kwargs):
 		"""
 		FRONT TOWARD ENEMY
 		This function is to be called by the client side.

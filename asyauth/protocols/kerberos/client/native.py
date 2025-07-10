@@ -112,7 +112,7 @@ class KerberosClientNative:
 		return kflags
 		
 	
-	async def authenticate(self, authData:bytes, flags:ISC_REQ = None, seq_number:int = 0, cb_data:bytes = None, spn:str = None):
+	async def authenticate(self, authData:bytes, flags:ISC_REQ = None, seq_number:int = 0, cb_data:bytes = None, spn:str = None, **kwargs):
 		"""
 		This function is called (multiple times depending on the flags) to perform authentication. 
 		"""

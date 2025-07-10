@@ -1,6 +1,7 @@
 import copy
 import os
 import struct
+from typing import cast
 from asyauth.common.winapi.constants import ISC_REQ
 
 from unicrypto import hmac
@@ -342,7 +343,16 @@ class NTLMClientNative:
 		
 		return ntlmflags
 
-	async def authenticate(self, authData, flags = None, cb_data = None, spn=None):
+	async def authenticate(self, authData, flags = None, cb_data = None, spn=None, **kwargs):
+		# check if kwargs have target info
+		target = None
+		try:
+			if 'target' in kwargs:
+				from asysocks.unicomm.common.target import UniTarget
+				target = cast(UniTarget, kwargs['target'])
+		except:
+			pass
+			
 		flags = self.isc_to_ntlm_flags(flags)
 		logger.debug('Flags: %s' % flags)
 		if self.iteration_cnt == 0:
@@ -375,7 +385,13 @@ class NTLMClientNative:
 					lmresp = LMResponse()
 					self.set_version(False)
 					lmresp.Response = b'\x00'
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= lmresp, mic=None, encrypted_session = self.EncryptedRandomSessionKey)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(
+						flags,
+						lm_response= lmresp,
+						mic=None,
+						encrypted_session = self.EncryptedRandomSessionKey,
+						workstationname=target.hostname if target is not None else None
+					)
 					logger.debug('NTLMv1 Guest - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 					return self.ntlmAuthenticate.to_bytes(), False, None
 						
@@ -386,14 +402,28 @@ class NTLMClientNative:
 					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key()
 					self.setup_crypto()
 						
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= self.ntlm_credentials.LMResponse, nt_response = self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(
+						flags,
+						lm_response= self.ntlm_credentials.LMResponse,
+						nt_response = self.ntlm_credentials.NTResponse,
+						version = self.ntlmNegotiate.Version,
+						encrypted_session = self.EncryptedRandomSessionKey,
+						workstationname=target.hostname if target is not None else None
+					)
 					logger.debug('NTLMv1 with extended security - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 				else:
 					self.ntlm_credentials = netntlm.construct(self.ntlmChallenge.ServerChallenge, self.credential)
 						
 					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key(with_lm = flags & NegotiateFlags.NEGOTIATE_LM_KEY, non_nt_session_key = flags & NegotiateFlags.REQUEST_NON_NT_SESSION_KEY)						
 					self.setup_crypto()
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= self.ntlm_credentials.LMResponse, nt_response = self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(
+						flags,
+						lm_response= self.ntlm_credentials.LMResponse,
+						nt_response = self.ntlm_credentials.NTResponse,
+						version = self.ntlmNegotiate.Version,
+						encrypted_session = self.EncryptedRandomSessionKey,
+						workstationname=target.hostname if target is not None else None
+					)
 					logger.debug('NTLMv1 - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 							
 							
@@ -405,7 +435,12 @@ class NTLMClientNative:
 					lmresp.Response = b'\x00'
 					self.set_version(False)
 					self.setup_crypto()
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, lm_response= lmresp, encrypted_session = self.EncryptedRandomSessionKey)						
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(
+						flags,
+						lm_response= lmresp,
+						encrypted_session = self.EncryptedRandomSessionKey,
+						workstationname=target.hostname if target is not None else None
+					)						
 					logger.debug('NTLMv2 Guest - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 					return self.ntlmAuthenticate.to_bytes(), False, None
 						
@@ -431,7 +466,17 @@ class NTLMClientNative:
 					#TODO: if "ti" / targetinfo in the challenge message has "MsvAvFlags" type and the bit for MIC is set (0x00000002) we need to send a MIC. probably...
 					mic = None
 						
-					self.ntlmAuthenticate = NTLMAuthenticate.construct(flags, domainname= self.credential.domain, workstationname= self.credential.negotiate_workstation, username= self.credential.username, lm_response= self.ntlm_credentials.LMResponse, nt_response= self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey, mic = mic)
+					self.ntlmAuthenticate = NTLMAuthenticate.construct(
+						flags,
+						domainname= self.credential.domain,
+						workstationname=target.hostname if target is not None else None,
+						username= self.credential.username,
+						lm_response= self.ntlm_credentials.LMResponse,
+						nt_response= self.ntlm_credentials.NTResponse,
+						version = self.ntlmNegotiate.Version,
+						encrypted_session = self.EncryptedRandomSessionKey,
+						mic = mic,
+					)
 				
 					logger.debug('NTLMv2 - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 			self.ntlmAuthenticate_raw = self.ntlmAuthenticate.to_bytes()

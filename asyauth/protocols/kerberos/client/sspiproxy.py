@@ -95,7 +95,7 @@ class KerberosClientSSPIProxy:
 	def get_session_key(self):
 		return self.session_key
 	
-	async def authenticate(self, authData = None, flags = ISC_REQ.CONNECTION, seq_number = 0, is_rpc = False):
+	async def authenticate(self, authData = None, flags = ISC_REQ.CONNECTION, seq_number = 0, is_rpc = False, **kwargs):
 		try:
 			if is_rpc == True:
 				if self.iterations == 0:

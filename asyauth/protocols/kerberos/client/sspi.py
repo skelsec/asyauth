@@ -46,7 +46,7 @@ class KerberosClientSSPI:
 			self.session_key = self.ksspi.get_session_key()
 		return self.session_key
 	
-	async def authenticate(self, authData = None, flags = ISC_REQ.CONNECTION, seq_number = 0, client_name = None, spn=None, cb_data = None):
+	async def authenticate(self, authData = None, flags = ISC_REQ.CONNECTION, seq_number = 0, client_name = None, spn=None, cb_data = None, **kwargs):
 		try:
 			#authdata is only for api compatibility reasons
 			if ISC_REQ.USE_DCE_STYLE in flags or ISC_REQ.MUTUAL_AUTH in flags:

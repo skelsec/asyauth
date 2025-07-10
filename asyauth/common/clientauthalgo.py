@@ -45,5 +45,5 @@ class ClientAuthAlgo:
 		"""Returns the session key bytes"""
 		raise NotImplementedError()
 
-	async def authenticate(self, authData:bytes, flags:ISC_REQ = None, cb_data:bytes = None, spn:str=None): # -> Tuple[bytes, bool, Exception]
+	async def authenticate(self, authData:bytes, flags:ISC_REQ = None, cb_data:bytes = None, spn:str=None, **kwargs): # -> Tuple[bytes, bool, Exception]
 		raise NotImplementedError()

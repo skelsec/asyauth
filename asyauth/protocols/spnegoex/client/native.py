@@ -50,7 +50,7 @@ class SPNEGOEXClientNative:
 	async def decrypt(self, data, message_no, direction='init', auth_data=None):
 		return self.gssapi.GSS_Unwrap(data, message_no, direction=direction, auth_data=auth_data)
 	
-	async def authenticate(self, authData, flags = None, spn = None):
+	async def authenticate(self, authData, flags = None, spn = None, **kwargs):
 		if self.iteractions == 0:
 			self.setup()
 			self.iteractions += 1

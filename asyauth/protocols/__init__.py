@@ -48,7 +48,7 @@ class ClientAuth:
 		raise NotImplementedError()
 	
 	
-	async def authenticate(self, token:bytes) -> Tuple[bytes, bool, Exception]:
+	async def authenticate(self, token:bytes, **kwargs) -> Tuple[bytes, bool, Exception]:
 		"""
 		This function is called (multiple times depending on the protocol) to perform authentication.
 

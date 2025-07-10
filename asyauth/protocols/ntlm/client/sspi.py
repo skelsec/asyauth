@@ -66,7 +66,7 @@ class NTLMClientSSPI:
 	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
 		return await self.ntlm_ctx.decrypt(data, sequence_no, direction=direction, auth_data=auth_data)
 	
-	async def authenticate(self, authData = None, flags = None, seq_number = 0, spn = None, cb_data = None):
+	async def authenticate(self, authData = None, flags = None, seq_number = 0, spn = None, cb_data = None, **kwargs):
 		to_continue = False
 		if flags is None:
 			flags = self.flags

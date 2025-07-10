@@ -67,7 +67,7 @@ class KerberosClientWSNETDirect:
 	def get_session_key(self):
 		return self.session_key.contents
 	
-	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None):
+	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None, **kwargs):
 		logger.debug('[WSNETDirect][Kerberos][%s] spn: %s' % (self._authid, spn))
 		logger.debug('[WSNETDirect][Kerberos][%s] flags: %s' % (self._authid, flags))
 		logger.debug('[WSNETDirect][Kerberos][%s] cb_data: %s' % (self._authid, cb_data))

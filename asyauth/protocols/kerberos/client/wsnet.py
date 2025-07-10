@@ -67,7 +67,7 @@ class KerberosClientWSNET:
 	def get_session_key(self):
 		return self.session_key.contents
 	
-	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None):
+	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None, **kwargs):
 		try:
 			if flags is None:
 				flags = ISC_REQ.CONFIDENTIALITY | \

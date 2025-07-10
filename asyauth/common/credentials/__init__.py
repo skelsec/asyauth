@@ -23,7 +23,14 @@ class UniCredential:
 			self.secret = base64.b64decode(self.secret).decode()
 		elif stype == asyauthSecret.PWHEX:
 			self.stype = asyauthSecret.PASSWORD
-			self.secret = bytes.fromhex(self.secret).decode()
+			self.secret = bytes.fromhex(self.secret)
+			if len(self.secret) % 2 == 0 and len(self.secret) > 50:
+				# special case for hex passwords that are not valid utf-8 rather just raw bytes
+				# for examle machine account passwords extracted from the registry
+				pass
+			else:
+				self.secret = self.secret.decode()
+
 		elif stype == asyauthSecret.PWPROMPT:
 			import getpass
 			self.stype = asyauthSecret.PASSWORD

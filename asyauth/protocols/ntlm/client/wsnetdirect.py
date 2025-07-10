@@ -72,7 +72,7 @@ class NTLMClientWSNETDirect:
 	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
 		return await self.ntlm_ctx.decrypt(data, sequence_no, direction=direction, auth_data=auth_data)
 	
-	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None):
+	async def authenticate(self, authData, flags:ISC_REQ = None, cb_data = None, spn=None, **kwargs):
 		try:
 			if flags is None:
 				flags = ISC_REQ.CONNECTION
