@@ -204,7 +204,7 @@ class UniCredential:
 			if extra['dcc'] is not None:
 				cross_target = UniTarget(extra['dcc'], 88, UniProto.CLIENT_TCP, proxies = proxies, dns=params['dnsc'], dc_ip=extra['dcc'])
 
-			etypes = extra['etype'] if extra['etype'] is not None else [23,17,18]
+			etypes = extra['etype']
 
 			return credobj(
 				secret, 

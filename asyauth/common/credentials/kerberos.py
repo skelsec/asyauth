@@ -11,7 +11,7 @@ from asyauth.utils.paramprocessor import str_one, int_one, bool_one, int_list
 #from minikerberos.pkinit import PKINIT
 
 class KerberosCredential(UniCredential):
-	def __init__(self, secret, username, domain, stype:asyauthSecret, target:UniTarget = None, altname:str = None, altdomain:str = None, etypes:List[int] = [23,17,18], subprotocol:SubProtocol = SubProtocolNative(), certdata:str = None, keydata:str=None, cross_target:UniTarget = None, cross_realm:str = None):
+	def __init__(self, secret, username, domain, stype:asyauthSecret, target:UniTarget = None, altname:str = None, altdomain:str = None, etypes:List[int] = None, subprotocol:SubProtocol = SubProtocolNative(), certdata:str = None, keydata:str=None, cross_target:UniTarget = None, cross_realm:str = None):
 		UniCredential.__init__(
 			self, 
 			secret = secret,
@@ -41,7 +41,7 @@ class KerberosCredential(UniCredential):
 		self.sanity_check()
 	
 	def sanity_check(self):
-		if self.domain is None or self.domain == '':
+		if self.stype not in [asyauthSecret.PFX, asyauthSecret.PFXSTR, asyauthSecret.PFXB64, asyauthSecret.PFXHEX, asyauthSecret.PEM] and not self.domain:
 			raise Exception('Kerberos credential must have domain set! %s' % str(self))
 		if self.target is None or self.target.dc_ip is None:
 			raise Exception('Kerberos credential target must have dc_ip set!')		
@@ -90,9 +90,9 @@ class KerberosCredential(UniCredential):
 		if basetype == asyauthSecret.CCACHE:
 			return KCRED.from_ccache(self.secret, self.username, self.domain, encoding=encoding)
 		if basetype == asyauthSecret.PFX:
-			return KCRED.from_pfx(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain, encoding=encoding)
+			return KCRED.from_pfx(self.keydata, self.secret, self.dh_params, self.username, self.domain, encoding=encoding)
 		if basetype == asyauthSecret.PFXSTR:
-			return KCRED.from_pfx_string(self.keydata, self.secret, self.dh_params, self.altname, self.altdomain)
+			return KCRED.from_pfx_string(self.keydata, self.secret, self.dh_params, self.username, self.domain)
 
 		res = KCRED()
 		res.username = self.username
