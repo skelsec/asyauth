@@ -28,6 +28,7 @@ class SPNEGORelay:
 		self.__relay_queue_notified = False
 		self.__authtype = None
 		self.connection_info = None
+		self.original_mechtypes = []
 	
 	def setup(self, log_q = None):
 		for k in self.authentication_contexts:
@@ -102,6 +103,12 @@ class SPNEGORelay:
 		if result is not None and len(result) > 0:
 			response['responseToken'] = result
 		return response, to_continue, None
+
+	async def authenticate_relay_server_finished(self):
+		# sending accept-completed to the client
+		response = {}
+		response['negState'] = NegState('accept-completed')
+		return NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump(), None
 		
 	async def process_ctx_authenticate(self, token_data, *args, **kwargs):
 		result, to_continue, err = await self.selected_authentication_context.authenticate(token_data, *args, **kwargs)
@@ -157,6 +164,7 @@ class SPNEGORelay:
 			if self.selected_authentication_context_server is None:
 				gss = GSSAPI.load(token).native
 				negtoken = gss['value']
+				self.original_mechtypes = negtoken['mechTypes']
 				if len(negtoken['mechTypes']) == 1:
 					self.selected_mechtype_server = negtoken['mechTypes'][0]
 					if negtoken['mechTypes'][0] == 'NTLMSSP - Microsoft NTLM Security Support Provider':
@@ -165,7 +173,15 @@ class SPNEGORelay:
 
 
 				else:
-					raise Exception('This path is not yet implemented')
+					for mechtype in negtoken['mechTypes']:
+						if mechtype == 'NTLMSSP - Microsoft NTLM Security Support Provider':
+							self.selected_mechtype_server = mechtype
+							self.selected_authentication_context_server = self.authentication_contexts[mechtype]
+							await self.notify_relay() # something is happening here!
+							break
+					if self.selected_authentication_context_server is None:
+						print('[DEBUG][MULTIPLE_MECHTYPES] negtoken: %s' % negtoken)
+						raise Exception('Failed to find NTLM in mechtypes: %s' % negtoken['mechTypes'])
 
 			if self.selected_authentication_context_server is not None:
 				if negtoken is None:
@@ -216,38 +232,24 @@ class SPNEGORelay:
 					#first call to auth, we need to create NegTokenInit2
 					#we must list all available auth types, if only one is present then generate initial auth data with it
 					
+					# Here be dragons!
+					# We suspect that the server sends us the mechtype of NTLM as the first one
+					# Problem is that we MUST keep the original mechtypes list, as it is used for mchlistMIC exchange
+					# If we do not send the original mechtypes list, the server will reject the authentication because we broke the MIC
 					selected_name = None
-					mechtypes = []
-					for mechname in self.authentication_contexts:
-						selected_name = mechname #only used if there is one!
-						mechtypes.append(MechType(mechname))
+					selected_name = self.authentication_contexts[self.original_mechtypes[0]]
+					
 					
 					response = {}
-					response['mechTypes'] = MechTypes(mechtypes)
+					response['mechTypes'] = MechTypes(self.original_mechtypes) # need to keep this for mchlistMIC exchange
 					
-					if len(mechtypes) == 1:
-						self.selected_authentication_context = self.authentication_contexts[selected_name]
-						self.selected_mechtype = selected_name
-						result, to_continue, err = await self.selected_authentication_context.authenticate(None, *args, **kwargs)
-						if err is not None:
-							return None, None, err
-						response['mechToken'] = result
-						#if is_rpc == False:
-						#	response['mechToken'] = result
-						#else:
-						#	if not result:
-						#		return None, False, None
-						#	if str(response['mechTypes'][0]) == '1.2.840.48018.1.2.2':
-						#		response['mechToken'] = KRB5Token(result).to_bytes()
-						#	else:
-						#		raise Exception('NTLM as RPC GSSAPI not implemented!')
-					
-					### First message and ONLY the first message goes out with additional wrapping
-					
+					self.selected_authentication_context = self.authentication_contexts[selected_name]
+					self.selected_mechtype = selected_name
+					result, to_continue, err = await self.selected_authentication_context.authenticate(None, *args, **kwargs)
+					if err is not None:
+						return None, None, err
+					response['mechToken'] = result					
 					negtoken = NegotiationToken({'negTokenInit':NegTokenInit2(response)})
-					
-					
-					#spnego = GSS_SPNEGO({'NegotiationToken':negtoken})
 					return GSSAPI({'type': GSSType('1.3.6.1.5.5.2'), 'value':negtoken}).dump(), True, None
 					
 					
@@ -298,22 +300,7 @@ class SPNEGORelay:
 						return self.__server_latest_token, True, None
 					else:
 						return res, to_continue, None
-					#return res, to_continue, None
-			
-				##everything is netotiated, but authentication needs more setps
-				#neg_token_raw = NegotiationToken.load(token)
-				#neg_token = neg_token_raw.native
-				#if neg_token['negState'] == 'accept-completed' and neg_token['responseToken'] is None:
-				#	return None, True, None
-				#response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
-				#if err is not None:
-				#	return None, None, err
-				#if not response:
-				#	return None, False, None
-				#
-				#if self.mic_data is not None:
-				#	response['mechListMIC'] = self.mic_data
-				#return NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump(), to_continue, None
+
 		except Exception as e:
 			self.__client_side_crash = e
 			return None, False, e

