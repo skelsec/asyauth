@@ -8,6 +8,9 @@ from ...common.constants import asyauthSecret
 from asyauth.protocols.ntlm.structures.challenge_response import *
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 from asyauth.common.credentials.ntlm import NTLMCredential
+from asyauth.protocols.ntlm.messages.authenticate import NTLMAuthenticate
+from asyauth.protocols.ntlm.messages.challenge import NTLMChallenge
+from asyauth.protocols.ntlm.messages.negotiate import NTLMNegotiate
 
 class Credential:
 	def __init__(self, ctype, username=None, domain=None, fullhash = None):
@@ -27,7 +30,7 @@ class Credential:
 
 class NTLMCredentials:
 	@staticmethod
-	def construct(ntlmNegotiate, ntlmChallenge, ntlmAuthenticate):
+	def construct(ntlmNegotiate:NTLMNegotiate, ntlmChallenge:NTLMChallenge, ntlmAuthenticate:NTLMAuthenticate):
 		# now the guessing-game begins
 
 		if isinstance(ntlmAuthenticate.NTChallenge, NTLMv2Response):
@@ -64,24 +67,29 @@ class NTLMCredentials:
 			return [creds, creds2]
 
 		else:
+			basecred = NTLMCredential('', ntlmAuthenticate.UserName, ntlmAuthenticate.DomainName, asyauthSecret.NT)
 			if ntlmAuthenticate.NegotiateFlags & NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY:
 				# extended security is used, this means that the LMresponse actually contains client challenge data
 				# and the LM and NT respondses need to be combined to form the cred data
 				creds = netntlm_ess()
-				creds.username = ntlmAuthenticate.UserName
-				creds.domain   = ntlmAuthenticate.DomainName
+				creds.credentials = basecred
 				creds.ServerChallenge = ntlmChallenge.ServerChallenge
-				creds.ClientResponse  = ntlmAuthenticate.NTChallenge.Response
-				creds.ChallengeFromClinet = ntlmAuthenticate.LMChallenge.Response
-
+				creds.LMResponse = LMResponse()
+				creds.LMResponse.Response = ntlmAuthenticate.LMChallenge.Response
+				creds.NTResponse = NTLMv1Response()
+				creds.NTResponse.Response = ntlmAuthenticate.NTChallenge.Response
 				return [creds.to_credential()]
 
 			else:
 				creds = netntlm()
+				creds.credentials = basecred
 				creds.username = ntlmAuthenticate.UserName
 				creds.domain   = ntlmAuthenticate.DomainName
 				creds.ServerChallenge = ntlmChallenge.ServerChallenge
-				creds.ClientResponse  = ntlmAuthenticate.NTChallenge.Response
+				creds.LMResponse = LMResponse()
+				creds.LMResponse.Response = ntlmAuthenticate.LMChallenge.Response
+				creds.NTResponse = NTLMv1Response()
+				creds.NTResponse.Response = ntlmAuthenticate.NTChallenge.Response
 				
 				if ntlmAuthenticate.NTChallenge.Response == ntlmAuthenticate.LMChallenge.Response:
 					# the the two responses are the same, then the client did not send encrypted LM hashes, only NT
@@ -94,7 +102,8 @@ class NTLMCredentials:
 				creds2.username = ntlmAuthenticate.UserName
 				creds2.domain   = ntlmAuthenticate.DomainName
 				creds2.ServerChallenge = ntlmChallenge.ServerChallenge
-				creds2.ClientResponse  = ntlmAuthenticate.LMChallenge.Response
+				creds2.LMResponse = LMResponse()
+				creds2.LMResponse.Response = ntlmAuthenticate.LMChallenge.Response
 				return [creds2.to_credential(), creds.to_credential()]
 
 class netlm:
@@ -205,8 +214,8 @@ class netntlm_ess:
 		# this comes from the NTLMChallenge class
 		self.ServerChallenge = None
 
-		self.LMResponse = None
-		self.NTResponse = None
+		self.LMResponse:LMResponse = None
+		self.NTResponse:NTLMv1Response = None
 		
 		self.SessionBaseKey = None
 		
@@ -252,10 +261,30 @@ class netntlm_ess:
 		return ntlm_creds
 
 	def to_credential(self):
+		username = self.credentials.username
+		if username is None:
+			username = ''
+		
+		domain = self.credentials.domain
+		if domain is None:
+			domain = ''
+		
+		lmresponse = self.LMResponse.Response
+		if lmresponse is None:
+			lmresponse = b''
+		if isinstance(lmresponse, bytes):
+			lmresponse = lmresponse.hex()
+		
+		ntresponse = self.NTResponse.Response
+		if ntresponse is None:
+			ntresponse = b''
+		if isinstance(ntresponse, bytes):
+			ntresponse = ntresponse.hex()
+			
 		cred = Credential(
 			'netNTLMv1-ESS',
-			username = self.username,
-			fullhash = '%s::%s:%s:%s:%s' % (self.credentials.username, self.credentials.domain, ntlm_creds.LMResponse.Response, ntlm_creds.NTResponse.Response, self.ServerChallenge)
+			username = username,
+			fullhash = '%s::%s:%s:%s:%s' % (username, domain, lmresponse, ntresponse, self.ServerChallenge.hex())
 		)
 		return cred
 		# u4-netntlm::kNS:338d08f8e26de93300000000000000000000000000000000:9526fb8c23a90751cdd619b6cea564742e1e4bf33006ba41:cb8086049ec4736c

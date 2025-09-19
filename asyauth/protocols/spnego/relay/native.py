@@ -29,6 +29,9 @@ class SPNEGORelay:
 		self.__authtype = None
 		self.connection_info = None
 		self.original_mechtypes = []
+
+	async def print_debug(self, message):
+		print('[SPNEGORelay] %s' % message)
 	
 	def setup(self, log_q = None):
 		for k in self.authentication_contexts:
@@ -180,7 +183,7 @@ class SPNEGORelay:
 							await self.notify_relay() # something is happening here!
 							break
 					if self.selected_authentication_context_server is None:
-						print('[DEBUG][MULTIPLE_MECHTYPES] negtoken: %s' % negtoken)
+						await self.print_debug('[DEBUG][MULTIPLE_MECHTYPES] negtoken: %s' % negtoken)
 						raise Exception('Failed to find NTLM in mechtypes: %s' % negtoken['mechTypes'])
 
 			if self.selected_authentication_context_server is not None:
@@ -189,8 +192,13 @@ class SPNEGORelay:
 						gss = GSSAPI.load(token).native
 						negtoken = gss['value']
 					else:
-						neg_token_raw = NegotiationToken.load(token)
-						negtoken = neg_token_raw.native
+						try:
+							neg_token_raw = NegotiationToken.load(token)
+							negtoken = neg_token_raw.native
+						except Exception as e:
+							await self.print_debug('[DEBUG][NEGTOKEN_LOAD_ERROR] %s' % token)
+							print('[DEBUG][NEGTOKEN_LOAD_ERROR] %s' % e)
+							raise e
 				if 'mechToken' in negtoken:
 					authdata = negtoken['mechToken']
 				else:
@@ -236,15 +244,23 @@ class SPNEGORelay:
 					# We suspect that the server sends us the mechtype of NTLM as the first one
 					# Problem is that we MUST keep the original mechtypes list, as it is used for mchlistMIC exchange
 					# If we do not send the original mechtypes list, the server will reject the authentication because we broke the MIC
-					selected_name = None
-					selected_name = self.authentication_contexts[self.original_mechtypes[0]]
 					
+					if len(self.original_mechtypes) == 0:
+						await self.print_debug('[CLIENT][AUTHENTICATE] No mechtypes found!')
+						raise Exception('No mechtypes found')
+					elif len(self.original_mechtypes) > 1:
+						await self.print_debug('[CLIENT][AUTHENTICATE] Multiple mechtypes found! Selecting first one: %s' % self.original_mechtypes[0])					
+					
+					self.selected_mechtype = self.original_mechtypes[0]
+					if self.selected_mechtype not in self.authentication_contexts:
+						await self.print_debug('[DEBUG][SELECTED_MECHTYPE_NOT_FOUND] %s' % self.selected_mechtype)
+						raise Exception('Selected mechtype not found: %s' % self.selected_mechtype)
+
+					self.selected_authentication_context = self.authentication_contexts[self.selected_mechtype]		
 					
 					response = {}
 					response['mechTypes'] = MechTypes(self.original_mechtypes) # need to keep this for mchlistMIC exchange
-					
-					self.selected_authentication_context = self.authentication_contexts[selected_name]
-					self.selected_mechtype = selected_name
+
 					result, to_continue, err = await self.selected_authentication_context.authenticate(None, *args, **kwargs)
 					if err is not None:
 						return None, None, err
