@@ -63,25 +63,81 @@ class NTLMChallenge:
 		
 		return t
 	
-	# TODO: needs some clearning up (like re-calculating flags when needed)
 	@staticmethod
-	def construct(challenge = os.urandom(8), targetName = None, targetInfo = None, version = None, flags = None):
-		pos = 48
-		if version:
-			pos += 8
+	def construct(challenge = None, targetName = None, targetInfo = None, version = None, flags = None):
+		"""
+		Construct a new NTLMChallenge message.
+		
+		Args:
+			challenge: 8-byte server challenge (defaults to random)
+			targetName: Target name string (optional)
+			targetInfo: AVPairs object for target info (optional) 
+			version: Version object (optional)
+			flags: NegotiateFlags object (required if version is provided)
+		
+		Returns:
+			NTLMChallenge: Constructed challenge message
+		"""
+		# Generate random challenge if not provided
+		if challenge is None:
+			challenge = os.urandom(8)
+		
+		# Validate challenge length
+		if len(challenge) != 8:
+			raise ValueError("Server challenge must be exactly 8 bytes")
+		
+		# Create new instance
 		t = NTLMChallenge()
-		t.NegotiateFlags    = flags
-		t.Version           = version
-		t.ServerChallenge   = challenge
-		t.TargetName        = targetName
-		t.TargetInfo        = targetInfo
-
-		t.TargetNameFields = Fields(len(t.TargetName.encode('utf-16le')),pos) 
-		t.TargetInfoFields = Fields(len(t.TargetInfo.to_bytes()), pos + len(t.TargetName.encode('utf-16le')))
-
-		t.Payload = t.TargetName.encode('utf-16le')
-		t.Payload += t.TargetInfo.to_bytes()
-
+		t.ServerChallenge = challenge
+		t.Version = version
+		
+		# Handle flags - set NEGOTIATE_VERSION if version is provided
+		if flags is None:
+			flags = NegotiateFlags(0)
+		elif not isinstance(flags, NegotiateFlags):
+			flags = NegotiateFlags(flags)
+		
+		if version is not None:
+			flags |= NegotiateFlags.NEGOTIATE_VERSION
+		
+		t.NegotiateFlags = flags
+		
+		# Calculate payload position after fixed fields
+		# Fixed header: 8 (sig) + 4 (type) + 8 (targetname fields) + 4 (flags) + 8 (challenge) + 8 (reserved) + 8 (targetinfo fields) = 48
+		payload_pos = 48
+		if version is not None:
+			payload_pos += 8  # Version structure is 8 bytes
+		
+		# Handle target name
+		if targetName is not None:
+			target_name_data = targetName.encode('utf-16le')
+			t.TargetName = targetName
+			t.TargetNameFields = Fields(len(target_name_data), payload_pos)
+			payload_pos += len(target_name_data)
+		else:
+			t.TargetName = ''
+			t.TargetNameFields = Fields(0, payload_pos)
+		
+		# Handle target info
+		if targetInfo is not None:
+			target_info_data = targetInfo.to_bytes()
+			t.TargetInfo = targetInfo
+			t.TargetInfoFields = Fields(len(target_info_data), payload_pos)
+		else:
+			# Create empty AVPairs with just EOL marker
+			t.TargetInfo = AVPairs()
+			target_info_data = t.TargetInfo.to_bytes()
+			t.TargetInfoFields = Fields(len(target_info_data), payload_pos)
+		
+		# Build payload
+		t.Payload = b''
+		if targetName is not None:
+			t.Payload += targetName.encode('utf-16le')
+		if targetInfo is not None:
+			t.Payload += targetInfo.to_bytes()
+		else:
+			t.Payload += t.TargetInfo.to_bytes()
+		
 		return t
 
 	def to_bytes(self):
@@ -120,6 +176,12 @@ def test():
 	test_template()
 	
 def test_reconstrut(data = None):
+	try:
+		from asyauth.utils.hexdump import hexdump
+	except ImportError:
+		def hexdump(data):
+			return data.hex()
+	
 	print('=== reconstruct===')
 	if not data:
 		challenge_test_data = bytes.fromhex('4e544c4d53535000020000000800080038000000158289e2a7314a557bdb11bf000000000000000072007200400000000a0063450000000f540045005300540002000800540045005300540001001200570049004e003200300031003900410044000400120074006500730074002e0063006f007200700003002600570049004e003200300031003900410044002e0074006500730074002e0063006f007200700007000800aec600bfc5fdd40100000000')
@@ -137,10 +199,48 @@ def test_reconstrut(data = None):
 def test_template():
 	
 	#challenge = NTLMChallenge.construct_from_template('Windows2003')
-	test_reconstrut(challenge.to_bytes())
+	#test_reconstrut(challenge.to_bytes())
+	pass
 	
 def test_construct():
-	pass
+	print('=== test_construct ===')
+	
+	# Test basic construction with minimal parameters
+	challenge1 = NTLMChallenge.construct()
+	print('Basic construct test passed')
+	
+	# Test with custom challenge
+	custom_challenge = b'\x01\x02\x03\x04\x05\x06\x07\x08'
+	challenge2 = NTLMChallenge.construct(challenge=custom_challenge)
+	assert challenge2.ServerChallenge == custom_challenge
+	print('Custom challenge test passed')
+	
+	# Test with target name
+	challenge3 = NTLMChallenge.construct(targetName="DOMAIN")
+	assert challenge3.TargetName == "DOMAIN"
+	print('Target name test passed')
+	
+	# Test with target info
+	from asyauth.protocols.ntlm.structures.avpair import AVPairs, AVPAIRType
+	target_info = AVPairs()
+	target_info[AVPAIRType.MsvAvNbDomainName] = "DOMAIN"
+	challenge4 = NTLMChallenge.construct(targetInfo=target_info)
+	assert challenge4.TargetInfo[AVPAIRType.MsvAvNbDomainName] == "DOMAIN"
+	print('Target info test passed')
+	
+	# Test roundtrip (construct -> to_bytes -> from_bytes)
+	challenge5 = NTLMChallenge.construct(
+		challenge=custom_challenge,
+		targetName="TEST",
+		targetInfo=target_info
+	)
+	data = challenge5.to_bytes()
+	challenge6 = NTLMChallenge.from_bytes(data)
+	assert challenge6.ServerChallenge == custom_challenge
+	assert challenge6.TargetName == "TEST"
+	print('Roundtrip test passed')
+	
+	print('All construct tests passed!')
 	
 if __name__ == '__main__':
 	from asyauth.utils.hexdump import hexdump

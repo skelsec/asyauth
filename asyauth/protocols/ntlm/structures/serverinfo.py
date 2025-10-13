@@ -20,9 +20,27 @@ class FILETIME:
 	def from_bytes(data):
 		return FILETIME.from_buffer(io.BytesIO(data))
 
+	@staticmethod
+	def from_datetime(dt):
+		t = FILETIME()
+		# Convert to Windows FILETIME: 100-nanosecond intervals since January 1, 1601 UTC
+		# Unix epoch starts at January 1, 1970, so we add the difference
+		unix_timestamp = int(dt.timestamp())
+		# Convert to 100-nanosecond intervals and add offset from 1601 to 1970
+		filetime_value = (unix_timestamp * 10000000) + 116444736000000000
+		t.dwLowDateTime = filetime_value & 0xFFFFFFFF
+		t.dwHighDateTime = (filetime_value >> 32) & 0xFFFFFFFF
+		t.calc_dt()
+		return t
+
+	def to_bytes(self):
+		if self.dwLowDateTime is None or self.dwHighDateTime is None:
+			raise ValueError("FILETIME values cannot be None for serialization")
+		return self.dwLowDateTime.to_bytes(4, 'little') + self.dwHighDateTime.to_bytes(4, 'little')
+	
 	def calc_dt(self):
 		if self.dwHighDateTime == 4294967295 and self.dwLowDateTime == 4294967295:
-			self.datetime = self.datetime = datetime.datetime(3000, 1, 1, 0, 0)
+			self.datetime = datetime.datetime(3000, 1, 1, 0, 0)
 		else:
 			ft = (self.dwHighDateTime << 32) + self.dwLowDateTime
 			if ft == 0:
