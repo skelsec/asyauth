@@ -1,7 +1,8 @@
-from asyauth import logger
-from asyauth.protocols.ntlm.client.native import NTLMClientNative
 from wsnet.pyodide.clientauth import WSNETAuth
+
 from asyauth.common.winapi.constants import ISC_REQ
+from asyauth.protocols.ntlm.client.native import NTLMClientNative
+
 
 class NTLMClientWSNET:
 	def __init__(self, credential):
