@@ -115,6 +115,7 @@ class SPNEGOClientNative:
 			new_ctx = copy.deepcopy(ctx)
 			ctx.ccred.private_key = private_key
 			new_ctx.ccred.private_key = private_key
+			return new_ctx
 		else:
 			new_ctx = copy.deepcopy(ctx)
 			return new_ctx
