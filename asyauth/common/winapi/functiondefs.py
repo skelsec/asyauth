@@ -32,7 +32,7 @@ class Structure(ctypes.Structure):
 
 
 # call API to get max token size, or..
-maxtoken_size = 2880 # bytes
+maxtoken_size = 65536 # bytes
 
 _FILETIME_null_date = datetime.datetime(1601, 1, 1, 0, 0, 0)
 def FiletimeToDateTime(ft):
