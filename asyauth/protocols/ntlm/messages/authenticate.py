@@ -4,6 +4,7 @@ from asyauth.protocols.ntlm.structures.fields import Fields
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 from asyauth.protocols.ntlm.structures.version import Version
 from asyauth.protocols.ntlm.structures.challenge_response import *
+from asyauth.protocols.ntlm.structures.avpair import MsvAvFlags, AVPAIRType
 
 # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/033d32cc-88f9-4483-9bf2-b273055038ce
 class NTLMAuthenticate:
@@ -112,7 +113,7 @@ class NTLMAuthenticate:
 		t = b''
 		t += self.Signature
 		t += self.MessageType.to_bytes(4, byteorder = 'little', signed = False)
-		
+
 		t += self.LmChallengeResponseFields.to_bytes()
 		t += self.NtChallengeResponseFields.to_bytes()
 		t += self.DomainNameFields.to_bytes()
@@ -120,13 +121,103 @@ class NTLMAuthenticate:
 		t += self.WorkstationFields.to_bytes()
 		t += self.EncryptedRandomSessionKeyFields.to_bytes()
 		t += self.NegotiateFlags.to_bytes(4, byteorder = 'little', signed = False)
-		if self.Version:
-			t += self.Version.to_bytes()
-		if self.MIC is not None:	
-			t += self.MIC
+		if self.Version is not None:
+			if isinstance(self.Version, bytes):
+				# parsing might have failed, fall back to raw bytes
+				t += self.Version
+			else:
+				t += self.Version.to_bytes()
+
+		if isinstance(self.NTChallenge, NTLMv2Response) and AVPAIRType.MsvAvFlags in self.NTChallenge.ChallengeFromClinet.Details:
+			# only emit MIC if MIC_PRESENT is actually set (it may have been dropped by a relay)
+			if self.MIC is not None and MsvAvFlags.MIC_PRESENT in self.NTChallenge.ChallengeFromClinet.Details[AVPAIRType.MsvAvFlags]:
+				t += self.MIC
+
 		t += self.Payload
 		return t
-		
+
+	def to_bytes_full(self):
+		"""
+		Rebuild the message from the high-level fields, ignoring self.Payload.
+		Use this after mutating fields whose serialized length may have changed
+		(e.g. dropping MIC-related AVPairs from the NTv2 client challenge).
+		"""
+		payload = b''
+		payload_pos = 8+4+8+8+8+8+8+8+4
+		if self.Version is not None:
+			payload_pos += 8
+
+		if self.MIC is not None:
+			payload_pos += 16
+
+		if self.LMChallenge is not None:
+			data = self.LMChallenge.to_bytes()
+			self.LmChallengeResponseFields = Fields(len(data), payload_pos)
+			payload += data
+			payload_pos += len(data)
+		else:
+			self.LmChallengeResponseFields = Fields(0, payload_pos)
+
+		if self.NTChallenge is not None:
+			data = self.NTChallenge.to_bytes()
+			self.NtChallengeResponseFields = Fields(len(data), payload_pos)
+			payload += data
+			payload_pos += len(data)
+		else:
+			self.NtChallengeResponseFields = Fields(0, payload_pos)
+
+		if self.DomainName is not None and len(self.DomainName) > 0:
+			data = self.DomainName.encode('utf-16le')
+			self.DomainNameFields = Fields(len(data), payload_pos)
+			payload += data
+			payload_pos += len(data)
+		else:
+			self.DomainNameFields = Fields(0, payload_pos)
+
+		if self.UserName is not None and len(self.UserName) > 0:
+			data = self.UserName.encode('utf-16le')
+			self.UserNameFields = Fields(len(data), payload_pos)
+			payload += data
+			payload_pos += len(data)
+		else:
+			self.UserNameFields = Fields(0, payload_pos)
+
+		if self.Workstation is not None and len(self.Workstation) > 0:
+			data = self.Workstation.encode('utf-16le')
+			self.WorkstationFields = Fields(len(data), payload_pos)
+			payload += data
+			payload_pos += len(data)
+		else:
+			self.WorkstationFields = Fields(0, payload_pos)
+
+		if self.EncryptedRandomSession is not None:
+			data = self.EncryptedRandomSession
+			self.EncryptedRandomSessionKeyFields = Fields(len(data), payload_pos)
+			payload += data
+			payload_pos += len(data)
+		else:
+			self.EncryptedRandomSessionKeyFields = Fields(0, payload_pos)
+
+		t = self.Signature
+		t += self.MessageType.to_bytes(4, byteorder = 'little', signed = False)
+		t += self.LmChallengeResponseFields.to_bytes()
+		t += self.NtChallengeResponseFields.to_bytes()
+		t += self.DomainNameFields.to_bytes()
+		t += self.UserNameFields.to_bytes()
+		t += self.WorkstationFields.to_bytes()
+		t += self.EncryptedRandomSessionKeyFields.to_bytes()
+		t += self.NegotiateFlags.to_bytes(4, byteorder = 'little', signed = False)
+		if self.Version is not None:
+			if isinstance(self.Version, bytes):
+				t += self.Version
+			else:
+				t += self.Version.to_bytes()
+		if self.MIC is not None:
+			t += self.MIC
+
+		t += payload
+		return t
+
 
 	@staticmethod
 	def from_bytes(bbuff,_use_NTLMv2 = True):
@@ -144,34 +235,50 @@ class NTLMAuthenticate:
 		auth.WorkstationFields = Fields.from_buffer(buff)
 		auth.EncryptedRandomSessionKeyFields = Fields.from_buffer(buff)
 		auth.NegotiateFlags = NegotiateFlags(int.from_bytes(buff.read(4), byteorder = 'little', signed = False))
-		if auth.NegotiateFlags & NegotiateFlags.NEGOTIATE_VERSION: 
-			auth.Version = Version.from_buffer(buff)
 
-		# TODO: I'm not sure about this condition!!! Need to test this!
-		if auth.NegotiateFlags & NegotiateFlags.NEGOTIATE_ALWAYS_SIGN:
-			auth.MIC = buff.read(16)
+		# Read Version as raw 8 bytes first; promote it to a Version object only
+		# if NEGOTIATE_VERSION is set, otherwise keep the raw bytes around so that
+		# to_bytes()/to_bytes_full() can re-emit them verbatim.
+		versiondata = buff.read(8)
+		if auth.NegotiateFlags & NegotiateFlags.NEGOTIATE_VERSION:
+			auth.Version = Version.from_bytes(versiondata)
+		else:
+			auth.Version = versiondata
 
 		currPos = buff.tell()
-		auth.Payload = buff.read()
 
-		if auth._use_NTLMv2 and auth.NtChallengeResponseFields.length > 24:
+		# Decide v1 vs v2 based on the NT challenge length: an NTLMv2 response is
+		# variable length and always exceeds 24 bytes, while an LMv2 response is
+		# exactly 24 bytes (so it can't be detected from its own length). Parse
+		# the LM and NT fields with matching versions to keep them consistent for
+		# downstream consumers (e.g. credential extraction).
+		use_v2 = auth._use_NTLMv2 and auth.NtChallengeResponseFields.length > 24
+
+		if use_v2:
 			buff.seek(auth.LmChallengeResponseFields.offset, io.SEEK_SET)
 			auth.LMChallenge = LMv2Response.from_buffer(buff)
-			
-
-			buff.seek(auth.NtChallengeResponseFields.offset, io.SEEK_SET)
-			auth.NTChallenge = NTLMv2Response.from_buffer(buff)
-
 		else:
 			buff.seek(auth.LmChallengeResponseFields.offset, io.SEEK_SET)
 			auth.LMChallenge = LMResponse.from_buffer(buff)
-				
+
+		if use_v2:
+			buff.seek(auth.NtChallengeResponseFields.offset, io.SEEK_SET)
+			auth.NTChallenge = NTLMv2Response.from_buffer(buff)
+			# MIC is only present when the client advertised MIC_PRESENT in the
+			# NTv2 client challenge AVPairs (MS-NLMP 2.2.2.10). It sits between
+			# the header (incl. Version) and the variable-length payload.
+			if AVPAIRType.MsvAvFlags in auth.NTChallenge.ChallengeFromClinet.Details:
+				if MsvAvFlags.MIC_PRESENT in auth.NTChallenge.ChallengeFromClinet.Details[AVPAIRType.MsvAvFlags]:
+					buff.seek(currPos, io.SEEK_SET)
+					auth.MIC = buff.read(16)
+					currPos += 16
+		else:
 			buff.seek(auth.NtChallengeResponseFields.offset, io.SEEK_SET)
 			auth.NTChallenge = NTLMv1Response.from_buffer(buff)
 
 		buff.seek(auth.DomainNameFields.offset,io.SEEK_SET)
 		auth.DomainName = buff.read(auth.DomainNameFields.length).decode('utf-16le')
-		
+
 		buff.seek(auth.UserNameFields.offset,io.SEEK_SET)
 		auth.UserName = buff.read(auth.UserNameFields.length).decode('utf-16le')
 
@@ -180,8 +287,9 @@ class NTLMAuthenticate:
 
 		buff.seek(auth.EncryptedRandomSessionKeyFields.offset,io.SEEK_SET)
 		auth.EncryptedRandomSession = buff.read(auth.EncryptedRandomSessionKeyFields.length)
-		
+
 		buff.seek(currPos, io.SEEK_SET)
+		auth.Payload = buff.read()
 
 		return auth
 
@@ -197,7 +305,7 @@ class NTLMAuthenticate:
 		t += 'DomainName    : %s\r\n' % repr(self.DomainName)
 		t += 'UserName      : %s\r\n' % repr(self.UserName)
 		t += 'Workstation   : %s\r\n' % repr(self.Workstation)
-		t += 'EncryptedRandomSession: %s\r\n' % repr(self.EncryptedRandomSession.hex())
+		t += 'EncryptedRandomSession: %s\r\n' % repr(self.EncryptedRandomSession.hex() if self.EncryptedRandomSession else 'None')
 		return t
 
 def test():

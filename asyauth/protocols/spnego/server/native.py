@@ -38,11 +38,27 @@ class SPNEGOserver:
 		self.connection_info = connection_info
 		
 	def is_guest(self):
-		if self.selected_authentication_context is None:
+		context = (
+			self.selected_authentication_context
+			or self.selected_authentication_context_server
+		)
+		if context is None:
 			raise Exception('Call this after selecting auth method!')
 		
-		if hasattr(self.selected_authentication_context, 'is_guest') is True:
-			return self.selected_authentication_context.is_guest()
+		if hasattr(context, 'is_guest') is True:
+			return context.is_guest()
+		return False
+
+	def is_anonymous(self):
+		context = (
+			self.selected_authentication_context
+			or self.selected_authentication_context_server
+		)
+		if context is None:
+			raise Exception('Call this after selecting auth method!')
+
+		if hasattr(context, 'is_anonymous') is True:
+			return context.is_anonymous()
 		return False
 
 	async def sign(self, data, message_no, direction='init'):

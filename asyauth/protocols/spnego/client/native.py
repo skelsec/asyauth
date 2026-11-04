@@ -64,6 +64,14 @@ class SPNEGOClientNative:
 		if hasattr(self.selected_authentication_context, 'is_guest') is True:
 			return self.selected_authentication_context.is_guest()
 		return False
+
+	def is_anonymous(self):
+		if self.selected_authentication_context is None:
+			raise Exception('Call this after selecting auth method!')
+
+		if hasattr(self.selected_authentication_context, 'is_anonymous') is True:
+			return self.selected_authentication_context.is_anonymous()
+		return False
 	
 	def signing_needed(self):
 		return self.selected_authentication_context.signing_needed()
@@ -133,12 +141,9 @@ class SPNEGOClientNative:
 		if not result:
 			return None, False, None
 		response = {}
-		#if include_negstate == True:
-		#	if to_continue == True:
-		#		response['negState'] = NegState('accept-incomplete')
-		#	else:
-		#		response['negState'] = NegState('accept-completed')
-		
+		# Always accept-incomplete: Windows CredSSP rejects accept-completed here, and
+		# picky-asn1-der (IronRDP) misparses responseToken when negState is absent.
+		response['negState'] = NegState('accept-incomplete')
 		response['responseToken'] = result
 		return response, to_continue, None
 		
@@ -253,7 +258,10 @@ class SPNEGOClientNative:
 				if not response:
 					return None, False, None
 
-				if self.selected_mechtype.startswith('NTLM'):
+				if (
+					self.selected_mechtype.startswith('NTLM')
+					and self.signing_needed()
+				):
 					response['mechListMIC'] = await self.sign(self.negtypes_store, 0, reset_cipher = True)
 					self.internal_seq += 1
 				res = NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump()

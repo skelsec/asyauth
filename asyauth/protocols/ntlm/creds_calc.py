@@ -6,6 +6,8 @@ from unicrypto import hmac
 from ...common.constants import asyauthSecret
 
 from asyauth.protocols.ntlm.structures.challenge_response import *
+from asyauth.protocols.ntlm.structures.avpair import AVPAIRType
+from asyauth.utils.timestamp import timestamp2datetime
 from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 from asyauth.common.credentials.ntlm import NTLMCredential
 from asyauth.protocols.ntlm.messages.authenticate import NTLMAuthenticate
@@ -57,14 +59,21 @@ class NTLMCredentials:
 			)
 				
 
-			creds2 = netlmv2()
-			creds2.username = ntlmAuthenticate.UserName
-			creds2.domain   = ntlmAuthenticate.DomainName
-			creds2.ServerChallenge = ntlmChallenge.ServerChallenge
-			creds2.ClientResponse  = ntlmAuthenticate.LMChallenge.Response
-			creds2.ChallengeFromClinet = ntlmAuthenticate.LMChallenge.ChallengeFromClinet
-			creds2 = creds2.to_credential()
-			return [creds, creds2]
+			# Some clients pair an NTLMv2 response with a non-v2 (or zeroed) LM
+			# response, which is parsed as a plain LMResponse and lacks the
+			# ChallengeFromClinet field. Only build the netNTLMv2 LM cred when an
+			# actual LMv2Response is present.
+			if isinstance(ntlmAuthenticate.LMChallenge, LMv2Response):
+				creds2 = netlmv2()
+				creds2.username = ntlmAuthenticate.UserName
+				creds2.domain   = ntlmAuthenticate.DomainName
+				creds2.ServerChallenge = ntlmChallenge.ServerChallenge
+				creds2.ClientResponse  = ntlmAuthenticate.LMChallenge.Response
+				creds2.ChallengeFromClinet = ntlmAuthenticate.LMChallenge.ChallengeFromClinet
+				creds2 = creds2.to_credential()
+				return [creds, creds2]
+
+			return [creds]
 
 		else:
 			basecred = NTLMCredential('', ntlmAuthenticate.UserName, ntlmAuthenticate.DomainName, asyauthSecret.NT)
@@ -486,10 +495,18 @@ class netntlmv2:
 			nt_hash_v2 = NTOWFv2(None, credentials.username, credentials.domain, bytes.fromhex(credentials.secret))
 		else:
 			raise Exception('Unsupported secret type "%s"' %  credentials.stype)
+		server_timestamp = None
+		if not timestamp and server_details is not None:
+			server_timestamp = server_details.get(AVPAIRType.MsvAvTimestamp)
 		if not timestamp:
 			timestamp = datetime.datetime.utcnow()
 		
 		cc = NTLMv2ClientChallenge.construct(timestamp, client_challenge, server_details)
+		if server_timestamp is not None:
+			# MS-NLMP 3.1.5.1.2: the client must echo the server's MsvAvTimestamp.
+			# Kept as raw FILETIME bytes, datetime cannot hold its 100ns precision.
+			cc.TimeStamp = bytes(server_timestamp)
+			cc.timestamp_dt = timestamp2datetime(cc.TimeStamp)
 		temp = cc.to_bytes()
 		
 		hm = hmac.new(nt_hash_v2, digestmod = 'md5')

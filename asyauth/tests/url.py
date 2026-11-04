@@ -44,7 +44,7 @@ class TestURLNTLM(unittest.TestCase):
             self.assertEqual(self.username, cred.username)
             self.assertEqual(self.stype, cred.stype)
             self.assertEqual(self.protocol, cred.protocol)
-            self.assertEqual(self.secret, cred.secret.decode())
+            self.assertEqual(self.secret, cred.secret)
 
 
     def test_ntlm_plain_b64(self):
@@ -58,7 +58,7 @@ class TestURLNTLM(unittest.TestCase):
             self.assertEqual(self.username, cred.username)
             self.assertEqual(self.stype, cred.stype)
             self.assertEqual(self.protocol, cred.protocol)
-            self.assertEqual(self.secret, cred.secret.decode())
+            self.assertEqual(self.secret, cred.secret)
 
     def test_ntlm_nt(self):
         urls = [
@@ -151,7 +151,7 @@ class TestURLKerberos(unittest.TestCase):
             self.assertEqual(self.username, cred.username)
             self.assertEqual(self.stype, cred.stype)
             self.assertEqual(self.protocol, cred.protocol)
-            self.assertEqual(self.secret, cred.secret.decode())
+            self.assertEqual(self.secret, cred.secret)
             self.assertEqual(self.target, cred.target.ip)
 
     def test_kerberos_plain_b64(self):
@@ -165,7 +165,7 @@ class TestURLKerberos(unittest.TestCase):
             self.assertEqual(self.username, cred.username)
             self.assertEqual(self.stype, cred.stype)
             self.assertEqual(self.protocol, cred.protocol)
-            self.assertEqual(self.secret, cred.secret.decode())
+            self.assertEqual(self.secret, cred.secret)
             self.assertEqual(self.target, cred.target.ip)
     
     def test_kerberos_plain_b64(self):
@@ -179,7 +179,7 @@ class TestURLKerberos(unittest.TestCase):
             self.assertEqual(self.username, cred.username)
             self.assertEqual(self.stype, cred.stype)
             self.assertEqual(self.protocol, cred.protocol)
-            self.assertEqual(self.secret, cred.secret.decode())
+            self.assertEqual(self.secret, cred.secret)
             self.assertEqual(self.target, cred.target.ip)
     
     def test_kerberos_nt(self):

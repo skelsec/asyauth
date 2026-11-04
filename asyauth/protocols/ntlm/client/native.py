@@ -74,6 +74,9 @@ class NTLMClientNative:
 	def is_guest(self):
 		return self.credential.is_guest
 
+	def is_anonymous(self):
+		return bool(getattr(self.credential, 'is_anonymous', False))
+
 	def get_seq_number(self):
 		return self.seq_number
 	
@@ -343,6 +346,18 @@ class NTLMClientNative:
 		
 		return ntlmflags
 
+	def _client_workstation(self, target):
+		# WorkstationName is the *client* machine. aiosmb passes the SMB
+		# server as ``target``; using ``target.hostname`` stuffed the server
+		# FQDN into AUTHENTICATE. Classic null sessions must keep that field
+		# empty — IPs worked only because create_connection_newtarget clears
+		# hostname for literals.
+		if self.is_anonymous() or getattr(self.credential, 'is_guest', False):
+			return self.credential.negotiate_workstation
+		if target is not None and getattr(target, 'hostname', None):
+			return target.hostname
+		return self.credential.negotiate_workstation
+
 	async def authenticate(self, authData, flags = None, cb_data = None, spn=None, **kwargs):
 		# check if kwargs have target info
 		target = None
@@ -370,9 +385,9 @@ class NTLMClientNative:
 			#server challenge incoming
 			self.ntlmChallenge_raw = authData
 			self.ntlmChallenge = NTLMChallenge.from_bytes(authData)
-				
-			##################flags = self.ntlmChallenge.NegotiateFlags
-				
+			# The AUTHENTICATE message must reflect the capabilities selected
+			# by the server, not the client's original NEGOTIATE proposal.
+			flags = self.ntlmChallenge.NegotiateFlags
 			#we need to calculate the response based on the credential and the settings flags
 			if self.credential.ntlm_version == 1:
 				logger.debug('NTLMv1 is used here')
@@ -380,17 +395,19 @@ class NTLMClientNative:
 				# https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/464551a8-9fc4-428e-b3d3-bc5bfb2e73a5
 					
 				#check if we authenticate as guest
-				if self.credential.is_guest == True:
-					logger.debug('NTLMv1 Guest authentication')
+				if self.is_anonymous() or self.credential.is_guest == True:
+					logger.debug('NTLMv1 anonymous authentication')
 					lmresp = LMResponse()
 					self.set_version(False)
+					flags &= ~NegotiateFlags.NEGOTIATE_VERSION
+					flags |= NegotiateFlags.J
 					lmresp.Response = b'\x00'
 					self.ntlmAuthenticate = NTLMAuthenticate.construct(
 						flags,
 						lm_response= lmresp,
 						mic=None,
 						encrypted_session = self.EncryptedRandomSessionKey,
-						workstationname=target.hostname if target is not None else None
+						workstationname=self._client_workstation(target)
 					)
 					logger.debug('NTLMv1 Guest - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 					return self.ntlmAuthenticate.to_bytes(), False, None
@@ -408,7 +425,7 @@ class NTLMClientNative:
 						nt_response = self.ntlm_credentials.NTResponse,
 						version = self.ntlmNegotiate.Version,
 						encrypted_session = self.EncryptedRandomSessionKey,
-						workstationname=target.hostname if target is not None else None
+						workstationname=self._client_workstation(target)
 					)
 					logger.debug('NTLMv1 with extended security - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 				else:
@@ -422,7 +439,7 @@ class NTLMClientNative:
 						nt_response = self.ntlm_credentials.NTResponse,
 						version = self.ntlmNegotiate.Version,
 						encrypted_session = self.EncryptedRandomSessionKey,
-						workstationname=target.hostname if target is not None else None
+						workstationname=self._client_workstation(target)
 					)
 					logger.debug('NTLMv1 - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 							
@@ -430,18 +447,21 @@ class NTLMClientNative:
 			else:
 				#NTLMv2
 				# https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/5e550938-91d4-459f-b67d-75d70009e3f3
-				if self.credential.is_guest == True:
+				if self.is_anonymous() or self.credential.is_guest == True:
 					lmresp = LMResponse()
 					lmresp.Response = b'\x00'
 					self.set_version(False)
+					flags &= ~NegotiateFlags.NEGOTIATE_VERSION
+					flags |= NegotiateFlags.J
 					self.setup_crypto()
 					self.ntlmAuthenticate = NTLMAuthenticate.construct(
 						flags,
 						lm_response= lmresp,
 						encrypted_session = self.EncryptedRandomSessionKey,
-						workstationname=target.hostname if target is not None else None
+						workstationname=self._client_workstation(target),
+						mic=None,
 					)						
-					logger.debug('NTLMv2 Guest - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
+					logger.debug('NTLMv2 anonymous - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 					return self.ntlmAuthenticate.to_bytes(), False, None
 						
 				else:
@@ -469,7 +489,7 @@ class NTLMClientNative:
 					self.ntlmAuthenticate = NTLMAuthenticate.construct(
 						flags,
 						domainname= self.credential.domain,
-						workstationname=target.hostname if target is not None else None,
+						workstationname=self._client_workstation(target),
 						username= self.credential.username,
 						lm_response= self.ntlm_credentials.LMResponse,
 						nt_response= self.ntlm_credentials.NTResponse,

@@ -10,6 +10,7 @@ from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
 from asyauth.utils.paramprocessor import str_one, int_one, bool_one, int_list
 
 ASYAUTH_NTLMCRED_SUPPORTED_STYPE = [
+	asyauthSecret.NONE,
 	asyauthSecret.PASSWORD,
 	asyauthSecret.PASS,
 	asyauthSecret.PW,
@@ -20,6 +21,7 @@ ASYAUTH_NTLMCRED_SUPPORTED_STYPE = [
 
 NTLM_URL_PARAMS = {
 	'ntlmnosig' : bool_one,
+	'ntlmdisableess' : bool_one,
 	'ntlmworkstation' : str_one,
 	'ntlmdomain' : str_one,
 	'ntlmflags' : int_one,
@@ -46,12 +48,25 @@ class NTLMCredential(UniCredential):
 			self.stype = asyauthSecret.NT
 		if isinstance(self.subprotocol, SubProtocolNative) and self.stype not in ASYAUTH_NTLMCRED_SUPPORTED_STYPE:
 			raise Exception('Unsupported Secret Type for NTLM auth: %s' % self.stype)
+
+		self.is_anonymous = False
+		if isinstance(self.subprotocol, SubProtocolNative) and self.stype is asyauthSecret.NONE:
+			if self.secret is not None:
+				raise ValueError('Anonymous NTLM credentials cannot contain a secret')
+			if self.username not in (None, '') or self.domain not in (None, ''):
+				raise ValueError('Native NTLM NONE credentials cannot contain a username or domain')
+			self.username = ''
+			self.domain = ''
+			self.is_anonymous = True
 		
 		
 		self.negotiate_workstation = kwargs.get('ntlmworkstation')
 		self.negotiate_domain = kwargs.get('ntlmdomain')
+		self.disable_ess = bool(kwargs.get('ntlmdisableess', False))
 		self.ntlm_version = 2
-		self.is_guest = False
+		# ``is_guest`` historically selected asyauth's anonymous NTLM wire path.
+		# Keep it as a compatibility alias while exposing the precise state.
+		self.is_guest = self.is_anonymous
 		self.flags = NegotiateFlags.NEGOTIATE_KEY_EXCH|\
 			NegotiateFlags.NEGOTIATE_128|\
 			NegotiateFlags.NEGOTIATE_VERSION|\
@@ -100,14 +115,19 @@ class NTLMCredential(UniCredential):
 		self.session_key = None
 	
 	@staticmethod
-	def create_guest():
+	def create_anonymous():
 		return NTLMCredential(
 			secret = None,
-			username= 'Guest',
-			domain = None,
-			stype = asyauthSecret.PASSWORD,
+			username = '',
+			domain = '',
+			stype = asyauthSecret.NONE,
 			subprotocol = SubProtocolNative()
 		)
+
+	@staticmethod
+	def create_guest():
+		"""Compatibility alias for the historical anonymous/null credential."""
+		return NTLMCredential.create_anonymous()
 			
 	@staticmethod
 	def get_url_params():

@@ -47,7 +47,7 @@ setup(
 	install_requires=[
 		'unicrypto>=0.0.12',
 		'asn1crypto>=1.3.0',
-		'asysocks>=0.2.18',
-		'minikerberos>=0.4.9',
+		'asysocks>=0.2.19',
+		'minikerberos>=0.4.11',
 	],
 )

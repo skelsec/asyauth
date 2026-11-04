@@ -80,6 +80,7 @@ class CredSSPClientNative:
 		self.seqno = 0
 		self.__internal_ssl_tunnel = None #CredSSP NEEDS TLS! CredSSP craves TLS!
 		self.__pubkey = None
+		self.__sent_pubkeyauth = None
 
 	@staticmethod
 	def certificate_to_pubkey(certdata):
@@ -233,6 +234,7 @@ class CredSSPClientNative:
 							sealedMessage, signature = await self.auth_ctx.encrypt(self.__pubkey, self.seqno)
 							self.seqno += 1
 							retoken['pubKeyAuth'] = signature+sealedMessage
+						self.__sent_pubkeyauth = retoken.get('pubKeyAuth')
 					
 					result = TSRequest(retoken)
 					logger.debug('CredSSP - sending internal auth token: %s' % result.native)
@@ -245,6 +247,19 @@ class CredSSPClientNative:
 					tdata = TSRequest.load(token).native
 					if tdata['errorCode'] is not None:
 						raise Exception('CredSSP - Server sent an error! Code: %s' % hex(tdata['errorCode'] & (2**32-1)))
+					if self.__sent_pubkeyauth is not None and tdata['negoTokens'] is not None and tdata['pubKeyAuth'] in (None, self.__sent_pubkeyauth):
+						# The server answered with its final SPNEGO token (mechListMIC) without processing our
+						# pubKeyAuth (winpr echoes it back) and expects it again in a separate message.
+						# Both sides reset the NTLM RC4 state after the MIC exchange, so the same bytes are valid.
+						logger.debug('CredSSP - server sent its final SPNEGO token separately, resending pubKeyAuth')
+						retoken = {
+							'version' : self.version,
+							'pubKeyAuth' : self.__sent_pubkeyauth,
+						}
+						if self.version in [5,6]:
+							retoken['clientNonce'] = self.nonce
+						self.__sent_pubkeyauth = None
+						return self.__return(TSRequest(retoken).dump(), True, None)
 					if tdata['pubKeyAuth'] is None:
 						raise Exception('Missing pubKeyAuth')
 					

@@ -449,7 +449,7 @@ class NTLMRelayHandler:
 		except Exception as e:
 			traceback.print_exc()
 			self.client_side_exception = e
-			await self.terminate()
+			self.terminate()
 			return None, False, e
 				
 def ntlmrelay_factory(ntlm_settings_factory: Callable = None) -> NTLMRelayHandler:

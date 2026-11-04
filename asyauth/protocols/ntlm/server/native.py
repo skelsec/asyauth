@@ -80,6 +80,9 @@ class NTLMServerNative:
 	def is_guest(self):
 		return self.credential.is_guest
 
+	def is_anonymous(self):
+		return bool(getattr(self.credential, 'is_anonymous', False))
+
 	def get_seq_number(self):
 		return self.seq_number
 	
@@ -389,6 +392,9 @@ class NTLMServerNative:
 			flags &= ~NegotiateFlags.NEGOTIATE_SEAL
 			flags &= ~NegotiateFlags.NEGOTIATE_SIGN
 			flags &= ~NegotiateFlags.TARGET_TYPE_SERVER
+			if getattr(self.credential, 'disable_ess', False):
+				flags &= ~NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY
+				logger.debug('Extended session security disabled by server policy')
 
 			self.ntlmChallenge = NTLMChallenge.construct(
 				challenge = os.urandom(8),
