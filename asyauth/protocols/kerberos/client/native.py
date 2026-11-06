@@ -9,7 +9,7 @@ from asyauth.protocols.kerberos.gssapismb import get_gssapi as gssapi_smb
 
 from minikerberos.common.spn import KerberosSPN
 from minikerberos.gssapi.gssapi import GSSAPIFlags
-from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, Ticket, EncryptedData
+from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, Ticket, EncryptedData, KRB_ERROR
 from minikerberos.protocol.constants import MESSAGE_TYPE
 from minikerberos.protocol.ticketutils import construct_apreq_from_ticket
 from minikerberos.protocol.encryption import Key, _enctype_table
@@ -237,12 +237,50 @@ class KerberosClientNative:
 			else:
 				self.seq_number = seq_number
 
-				logger.debug('Processing AP_REP %s' % authData.hex())
-				try:
-					temp = KRB5_MECH_INDEP_TOKEN.from_bytes(authData)
-					aprep = AP_REP.load(temp.data[2:]).native
-				except Exception as e:
-					aprep = AP_REP.load(authData).native
+				logger.debug('Processing Kerberos response %s', authData.hex())
+
+				if not authData:
+					raise ValueError("Empty Kerberos response")
+
+				payload = authData
+				token_id = None
+
+				# Unwrap GSS-API framing if present
+				if payload.startswith(b'\x60'):
+					token = KRB5_MECH_INDEP_TOKEN.from_bytes(payload)
+
+					if len(token.data) < 3:
+						raise ValueError("Truncated GSS-API Kerberos token")
+
+					token_id = token.data[:2]
+					payload = token.data[2:]
+
+				# Also handle an unwrapped GSS token identifier
+				elif payload[:2] in (b'\x02\x00', b'\x03\x00'):
+					token_id = payload[:2]
+					payload = payload[2:]
+
+				if token_id not in (None, b'\x02\x00', b'\x03\x00'):
+					raise ValueError(
+						f"Unexpected Kerberos GSS token ID: {token_id.hex()}"
+					)
+
+				# KRB_ERROR: application tag 30
+				if token_id == b'\x03\x00' or payload.startswith(b'\x7e'):
+					krb_error = KRB_ERROR.load(payload)
+					logger.error(
+						"Kerberos error %s",
+						krb_error.native['error-code']
+					)
+					raise KerberosError(krb_error)
+
+				# AP_REP: application tag 15
+				if not payload.startswith(b'\x6f'):
+					raise ValueError(
+						f"Unexpected Kerberos response: {payload[:16].hex()}"
+					)
+
+				aprep = AP_REP.load(payload).native
 				
 				logger.debug('AP_REP: %s' % aprep)
 				cipher = _enctype_table[int(aprep['enc-part']['etype'])]()
