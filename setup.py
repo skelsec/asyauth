@@ -48,6 +48,6 @@ setup(
 		'unicrypto>=0.0.12',
 		'asn1crypto>=1.3.0',
 		'asysocks>=0.2.19',
-		'minikerberos>=0.4.11',
+		'minikerberos>=0.4.12',
 	],
 )
