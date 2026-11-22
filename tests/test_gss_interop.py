@@ -30,12 +30,14 @@ def get_credential(lab, stype = asyauthSecret.PASSWORD, secret = None):
 		secret = lab.password
 	return KerberosCredential(secret, lab.user, lab.realm, stype, target = target)
 
-async def establish(lab, peer, service = 'aes256', flags = BASE | MUTUAL, use_subkey = True, cb_data = None, peer_cb = None, credential = None):
+async def establish(lab, peer, service = 'aes256', flags = BASE | MUTUAL, use_subkey = True, cb_data = None, peer_cb = None, credential = None, spn = None):
+	if spn is None:
+		spn = 'nfs/%s.test.lab@%s' % (service, lab.realm)
 	if credential is None:
 		credential = get_credential(lab)
 	ctx = credential.build_gss_context()
 	ctx.use_subkey = use_subkey
-	token, to_continue, err = await ctx.authenticate(None, flags = flags, spn = 'nfs/%s.test.lab@%s' % (service, lab.realm), cb_data = cb_data)
+	token, to_continue, err = await ctx.authenticate(None, flags = flags, spn = spn, cb_data = cb_data)
 	if err is not None:
 		raise err
 	assert gss_unframe(token)[:2] == b'\x01\x00'
