@@ -356,12 +356,12 @@ class netntlm:
 		self.SessionBaseKey = None
 		
 	def calc_key_exchange_key(self, with_lm = False, non_nt_session_key = False):
-	
-		if self.credentials.password:
-			lm_hash = LMOWFv1(self.credentials.password)
+
+		if self.credentials.stype == asyauthSecret.PASSWORD:
+			lm_hash = LMOWFv1(self.credentials.secret)
 		else:
-			lm_hash = self.credentials.lm_hash
-		
+			lm_hash = None
+	
 		if with_lm:
 			temp1 = DES(lm_hash[:7]).encrypt(self.LMResponse.to_bytes()[:8])
 			temp2 = DES(lm_hash[7:8] + b'\xBD\xBD\xBD\xBD\xBD\xBD').encrypt(self.LMResponse.to_bytes()[:8])
@@ -396,7 +396,8 @@ class netntlm:
 			ntlm_creds.LMResponse = LMResponse()
 			ntlm_creds.LMResponse.Response = DESL(lm_hash, server_challenge)
 		else:
-			ntlm_creds.LMResponse = ntresponse
+			# no LM hash available (e.g. NT-hash auth): mirror the NT response
+			ntlm_creds.LMResponse = ntlm_creds.NTResponse
 		
 		ntlm_creds.SessionBaseKey = hashlib.md4(nt_hash).digest()
 		

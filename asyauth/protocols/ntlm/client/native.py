@@ -421,25 +421,31 @@ class NTLMClientNative:
 						
 					self.ntlmAuthenticate = NTLMAuthenticate.construct(
 						flags,
+						domainname= self.credential.domain,
+						username= self.credential.username,
 						lm_response= self.ntlm_credentials.LMResponse,
 						nt_response = self.ntlm_credentials.NTResponse,
 						version = self.ntlmNegotiate.Version,
 						encrypted_session = self.EncryptedRandomSessionKey,
-						workstationname=self._client_workstation(target)
+						workstationname=self._client_workstation(target),
+						mic=None,
 					)
 					logger.debug('NTLMv1 with extended security - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 				else:
 					self.ntlm_credentials = netntlm.construct(self.ntlmChallenge.ServerChallenge, self.credential)
-						
-					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key(with_lm = flags & NegotiateFlags.NEGOTIATE_LM_KEY, non_nt_session_key = flags & NegotiateFlags.REQUEST_NON_NT_SESSION_KEY)						
+
+					self.KeyExchangeKey = self.ntlm_credentials.calc_key_exchange_key(with_lm = flags & NegotiateFlags.NEGOTIATE_LM_KEY, non_nt_session_key = flags & NegotiateFlags.REQUEST_NON_NT_SESSION_KEY)
 					self.setup_crypto()
 					self.ntlmAuthenticate = NTLMAuthenticate.construct(
 						flags,
+						domainname= self.credential.domain,
+						username= self.credential.username,
 						lm_response= self.ntlm_credentials.LMResponse,
 						nt_response = self.ntlm_credentials.NTResponse,
 						version = self.ntlmNegotiate.Version,
 						encrypted_session = self.EncryptedRandomSessionKey,
-						workstationname=self._client_workstation(target)
+						workstationname=self._client_workstation(target),
+						mic=None,
 					)
 					logger.debug('NTLMv1 - NTLMAuthenticate: %s' % self.ntlmAuthenticate)
 							
