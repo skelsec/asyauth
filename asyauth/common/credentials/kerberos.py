@@ -136,10 +136,10 @@ class KerberosCredential(UniCredential):
 			res.kerberos_key_des = self.secret
 		elif self.stype in [asyauthSecret.DES3, asyauthSecret.TDES]:
 			if isinstance(self.secret, str) is True:
-				if len(self.secret) != 24:
+				if len(self.secret) != 48:
 					raise Exception('Incorrect DES3 key! %s' % self.secret)
 			elif isinstance(self.secret, bytearray) is True:
-				if len(self.secret) != 12:
+				if len(self.secret) != 24:
 					raise Exception('Incorrect DES3 key! %s' % self.secret)
 			res.kerberos_key_des3 = self.secret
 		elif self.stype == asyauthSecret.NONE:
