@@ -1,7 +1,7 @@
-# Offline tests of the RFC4121 / RFC4757 per-message tokens.
+# Offline tests of the RFC4121 / RFC4757 / RFC1964 per-message tokens.
 #
 # The RFCs have no test vectors for the tokens themselves, so the known answers
-# here were produced by MIT krb5 1.20 (see tests/lab/genvectors.py).
+# here were produced by MIT krb5 (see tests/lab/genvectors.py).
 import os
 import json
 
@@ -11,14 +11,28 @@ from minikerberos.protocol.encryption import Key, Enctype
 from asyauth.protocols.kerberos.gssapirfc import get_gssapi_rfc, gss_frame, gss_unframe, \
 	rotate_right, GSSAPI_RFC4121
 
-VECTORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata', 'mit_gss_vectors.json')
+VECTORS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testdata')
+# mit_gss_vectors_legacy.json is from MIT krb5 1.17, the last one with single DES
+VECTORS_FILES = ['mit_gss_vectors.json', 'mit_gss_vectors_legacy.json']
+
+def get_key(enctype, contents):
+	if enctype in (Enctype.DES_CRC, Enctype.DES_MD4):
+		# minikerberos has no profile for these, the tokens are the same for all DES enctypes
+		key = Key(Enctype.DES_MD5, contents)
+		key.enctype = enctype
+		return key
+	return Key(enctype, contents)
 
 def load_vectors():
-	with open(VECTORS_FILE, 'r') as f:
-		vectors = json.load(f)
+	vectors = []
+	for fname in VECTORS_FILES:
+		with open(os.path.join(VECTORS_DIR, fname), 'r') as f:
+			vectors += json.load(f)
 	for v in vectors:
 		key = bytes.fromhex(v['key'])
-		if v['initiator'][0]['token'].startswith('60'):
+		if 'enctype' in v:
+			pass
+		elif v['initiator'][0]['token'].startswith('60'):
 			v['enctype'] = Enctype.RC4
 		elif len(key) == 16:
 			v['enctype'] = Enctype.AES128
@@ -32,6 +46,9 @@ KEYS = [
 	Key(Enctype.AES256, bytes(range(32))),
 	Key(Enctype.AES128, bytes(range(16))),
 	Key(Enctype.RC4, bytes(range(16))),
+	Key(Enctype.DES3, bytes(range(1, 25))),
+	Key(Enctype.DES_MD5, bytes(range(1, 9))),
+	get_key(Enctype.DES_CRC, bytes(range(1, 9))),
 ]
 DATA = [b'', b'a', b'0123456789abcde', b'0123456789abcdef', b'0123456789abcdefg', os.urandom(1000)]
 
@@ -41,11 +58,14 @@ def test_vectors_cover_all_etypes():
 	assert '%s-nosubkey' % Enctype.AES256 in ids
 	assert '%s-nosubkey' % Enctype.AES128 in ids
 	assert '%s-nosubkey' % Enctype.RC4 in ids
+	assert '%s-nosubkey' % Enctype.DES3 in ids
+	assert '%s-nosubkey' % Enctype.DES_MD5 in ids
+	assert '%s-nosubkey' % Enctype.DES_CRC in ids
 
 @pytest.mark.parametrize('vector', VECTORS, ids = [v['id'] for v in VECTORS])
 @pytest.mark.parametrize('sender', ['initiator', 'acceptor'])
 def test_mit_vectors(vector, sender):
-	key = Key(vector['enctype'], bytes.fromhex(vector['key']))
+	key = get_key(vector['enctype'], bytes.fromhex(vector['key']))
 	# we are the other side
 	receiver = get_gssapi_rfc(key, is_initiator = sender == 'acceptor', acceptor_subkey = vector['acceptor_subkey'])
 	same_side = get_gssapi_rfc(key, is_initiator = sender == 'initiator', acceptor_subkey = vector['acceptor_subkey'])
@@ -140,7 +160,7 @@ def test_tamper(key):
 			assert err is not None
 
 	# wrong key
-	other = get_gssapi_rfc(Key(key.enctype, bytes(len(key.contents))), is_initiator = False)
+	other = get_gssapi_rfc(get_key(key.enctype, bytes(len(key.contents))), is_initiator = False)
 	token, _ = initiator.GSS_GetMIC(data, 1)
 	_, err = other.GSS_VerifyMIC(data, token)
 	assert err is not None
@@ -234,4 +254,4 @@ def test_framing():
 
 def test_unsupported_etype():
 	with pytest.raises(Exception):
-		get_gssapi_rfc(Key(Enctype.DES3, bytes(24)))
+		get_gssapi_rfc(Key(Enctype.RC4_MD4, bytes(16)))

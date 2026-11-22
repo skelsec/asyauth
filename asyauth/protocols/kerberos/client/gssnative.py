@@ -13,6 +13,10 @@
 #	token, err = await ctx.wrap(data, confidential = True)
 #	data, confidential, err = await ctx.unwrap(token_from_peer)
 #
+# The per-message tokens follow the etype of the context key: AES (RFC4121), RC4
+# (RFC4757), 3DES and DES (RFC1964). ctx.etypes is the list of ticket session key
+# etypes the KDC is asked for, set it to get a weaker context than the default.
+#
 # Service in another realm: either the SPN has that realm or the KDC of the user
 # knows and answers with a referral, both are followed. The KDC of the other realm
 # is the cross_target of the credential (dcc, realmc). Without that, and for the
@@ -39,7 +43,7 @@ from minikerberos.protocol.asn1_structs import AP_REQ, AP_REP, EncAPRepPart, Tic
 	EncryptedData, KRB_ERROR, Authenticator, Checksum, APOptions, PrincipalName, \
 	Realm, EncryptionKey, TGS_REP, krb5_pvno
 from minikerberos.protocol.constants import MESSAGE_TYPE
-from minikerberos.protocol.encryption import Key, _enctype_table
+from minikerberos.protocol.encryption import Key, Enctype, _enctype_table, _is_weak_des_key
 from minikerberos.aioclient import AIOKerberosClient
 from minikerberos.protocol.errors import KerberosError, KerberosErrorCode
 
@@ -83,6 +87,9 @@ class KerberosGSSClientNative:
 
 		# set this to False before authenticating to not send a subkey in the authenticator
 		self.use_subkey = True
+		# etypes of the ticket session key to ask the KDC for, in the order of preference.
+		# The etype of the context follows this, set before authenticating (eg. [3] for DES only)
+		self.etypes = [18, 17, 23, 16, 3]
 
 		self.send_seq = 0
 		self.recv_seq = 0
@@ -227,7 +234,7 @@ class KerberosGSSClientNative:
 			newkc = AIOKerberosClient(self.ccred, newtarget)
 			ref_tgs, ref_encpart, ref_key, new_factory = await newkc.get_referral_ticket(spn.domain, self.credential.target.get_ip_or_hostname())
 			self.kc = new_factory.get_client()
-			tgs, encpart, session_key = await self.kc.get_TGS(spn)
+			tgs, encpart, session_key = await self.kc.get_TGS(spn, override_etype = self.etypes)
 			return tgs, session_key
 
 		# if the target server is in a different domain, we need to get a referral ticket
@@ -236,7 +243,7 @@ class KerberosGSSClientNative:
 		if self.credential.domain is not None and spn.domain.upper() != self.credential.domain.upper():
 			await self.switch_realm(spn.domain)
 
-		tgs, encpart, session_key = await self.kc.get_TGS(spn)
+		tgs, encpart, session_key = await self.kc.get_TGS(spn, override_etype = self.etypes)
 		for _ in range(10):
 			realm = self.get_referral_realm(tgs, spn)
 			if realm is None:
@@ -245,7 +252,7 @@ class KerberosGSSClientNative:
 			logger.debug('Got referral to realm %s' % realm)
 			await self.switch_realm(realm)
 			spn.domain = realm
-			tgs, encpart, session_key = await self.kc.get_TGS(spn)
+			tgs, encpart, session_key = await self.kc.get_TGS(spn, override_etype = self.etypes)
 		raise Exception('Too many referrals')
 
 	def get_referral_realm(self, tgs, spn:KerberosSPN):
@@ -266,6 +273,21 @@ class KerberosGSSClientNative:
 				target_ip = self.credential.cross_target.get_ip_or_hostname()
 		ref_tgs, ref_encpart, ref_key, new_factory = await self.kc.get_referral_ticket(realm, target_ip)
 		self.kc = new_factory.get_client()
+
+	def generate_subkey(self):
+		cipher = _enctype_table[self.session_key.enctype]
+		if self.session_key.enctype != Enctype.DES_MD5:
+			return cipher.random_to_key(os.urandom(cipher.seedsize))
+		# MIT refuses DES keys with bad parity
+		while True:
+			keydata = b''
+			for b in os.urandom(8):
+				b &= 0xFE
+				if bin(b).count('1') % 2 == 0:
+					b |= 1
+				keydata += bytes([b])
+			if _is_weak_des_key(keydata) is False:
+				return Key(self.session_key.enctype, keydata)
 
 	def construct_apreq(self, tgs, cb_data:bytes = None):
 		# RFC4121 4.1.1 authenticator checksum
@@ -369,8 +391,7 @@ class KerberosGSSClientNative:
 				tgs, self.session_key = await self.get_ticket(spn)
 
 				if self.use_subkey is True:
-					cipher = _enctype_table[self.session_key.enctype]
-					self.initiator_subkey = cipher.random_to_key(os.urandom(cipher.seedsize))
+					self.initiator_subkey = self.generate_subkey()
 
 				self.send_seq = seq_number
 				if self.send_seq is None:

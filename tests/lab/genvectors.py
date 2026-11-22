@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Generates per-message token test vectors with MIT krb5 on both sides of the context.
-# Run inside the lab container, prints JSON. See tests/test_gssapirfc_vectors.py
+# Run inside the lab container, prints JSON. See tests/test_gssapirfc.py
 import os
 import sys
 import json
@@ -11,7 +11,7 @@ INQ_SESSION_KEY = OID.from_int_seq('1.2.840.113554.1.2.2.5.5')
 F = gssapi.RequirementFlag
 DATA = [b'', b'a', b'0123456789abcdef', b'The quick brown fox jumps over the lazy dog']
 
-def gen(user, service, mutual):
+def gen(user, service, enctype, mutual):
 	os.environ['KRB5CCNAME'] = 'MEMORY:%s' % user
 	icreds = gssapi.raw.acquire_cred_from({b'client_keytab' : b'/creds/alice.keytab', b'ccache' : b'MEMORY:%s' % user.encode()}, name = gssapi.Name(user, gssapi.NameType.kerberos_principal), usage = 'initiate').creds
 	flags = [F.integrity, F.confidentiality]
@@ -26,7 +26,7 @@ def gen(user, service, mutual):
 			token = actx.step(token)
 	key = inquire_sec_context_by_oid(ictx, INQ_SESSION_KEY)
 	res = {
-		'user' : user, 'service' : service, 'acceptor_subkey' : mutual,
+		'user' : user, 'service' : service, 'enctype' : enctype, 'acceptor_subkey' : mutual,
 		'key' : key[0].hex(),
 		'initiator' : [], 'acceptor' : [],
 	}
@@ -37,8 +37,17 @@ def gen(user, service, mutual):
 			res[name].append({'type' : 'wrap', 'conf' : True, 'data' : data.hex(), 'token' : ctx.wrap(data, True).message.hex()})
 	return res
 
+domain = os.environ.get('LAB_REALM', 'TEST.LAB').lower()
+services = {'aes256' : 18, 'aes128' : 17, 'rc4' : 23}
+if os.environ.get('LAB_LEGACY'):
+	services = {'des3' : 16, 'des' : 3, 'descrc' : 1}
+
 vectors = []
-for user, service in (('alice', 'nfs/aes256.test.lab'), ('alice', 'nfs/aes128.test.lab'), ('alice', 'nfs/rc4.test.lab')):
+for service in services:
 	for mutual in (True, False):
-		vectors.append(gen(user, service, mutual))
+		if mutual is True and services[service] not in (17, 18):
+			# MIT initiators offer their enctypes (RFC4537) and the acceptor answers with
+			# an AES subkey, that would be the same tokens as with the AES services
+			continue
+		vectors.append(gen('alice', 'nfs/%s.%s' % (service, domain), services[service], mutual))
 json.dump(vectors, sys.stdout, indent = 1)

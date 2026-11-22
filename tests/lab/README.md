@@ -1,7 +1,7 @@
 # krb5 lab
 
 Throwaway MIT krb5 KDC (Debian bookworm, krb5 1.20) with python-gssapi in the
-same container, for the interop tests of the RFC4121 GSSAPI code
+same container, for the interop tests of the kerberos GSSAPI code
 (`asyauth/protocols/kerberos/gssapirfc.py`, `client/gssnative.py`).
 
 `pytest tests/` builds and starts the container on its own when docker is
@@ -36,7 +36,22 @@ so asking the KDC of `TEST.LAB` for `nfs/aes256.other.lab` is answered with a
 referral. The tests which need the KDC of a realm to be found by the name of
 the realm patch the name resolution of python for that.
 
+## DES and 3DES
+
+`Dockerfile.legacy` is the same lab on Debian buster (krb5 1.17, the last
+release with single DES), container `asyauth-krb5lab-legacy`, realm
+`LEGACY.LAB`, started only for `tests/test_gss_legacy.py`. On top of the
+usual services it has `nfs/des3.legacy.lab` (des3-cbc-sha1 session key),
+`nfs/des.legacy.lab` (des-cbc-md5), `nfs/descrc.legacy.lab` (des-cbc-crc) and
+`nfs/any.legacy.lab` which gets the session key etype the client prefers.
+
+    docker build -t asyauth-krb5lab-legacy -f tests/lab/Dockerfile.legacy tests/lab
+    docker run -d --name asyauth-krb5lab-legacy --hostname kdc.legacy.lab -e LAB_REALM=LEGACY.LAB asyauth-krb5lab-legacy
+
+## Files
+
 - `peer.py` MIT GSSAPI acceptor driven over stdin/stdout
-- `genvectors.py` generates `tests/testdata/mit_gss_vectors.json` (MIT on both
-  sides of the context):
+- `genvectors.py` generates the token test vectors in `tests/testdata/` (MIT on
+  both sides of the context):
   `docker exec asyauth-krb5lab python3 /genvectors.py > tests/testdata/mit_gss_vectors.json`
+  `docker exec asyauth-krb5lab-legacy python3 /genvectors.py > tests/testdata/mit_gss_vectors_legacy.json`

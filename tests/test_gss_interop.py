@@ -21,7 +21,7 @@ BASE = F.GSS_C_CONF_FLAG | F.GSS_C_INTEG_FLAG
 SEQ = F.GSS_C_REPLAY_FLAG | F.GSS_C_SEQUENCE_FLAG
 MUTUAL = F.GSS_C_MUTUAL_FLAG
 
-ETYPES = {'aes256' : 18, 'aes128' : 17, 'rc4' : 23}
+ETYPES = {'aes256' : 18, 'aes128' : 17, 'rc4' : 23, 'des3' : 16, 'des' : 3}
 DATA = [b'', b'a', b'0123456789abcdef', b'The quick brown fox jumps over the lazy dog', os.urandom(5000)]
 
 def get_credential(lab, stype = asyauthSecret.PASSWORD, secret = None):
@@ -30,13 +30,15 @@ def get_credential(lab, stype = asyauthSecret.PASSWORD, secret = None):
 		secret = lab.password
 	return KerberosCredential(secret, lab.user, lab.realm, stype, target = target)
 
-async def establish(lab, peer, service = 'aes256', flags = BASE | MUTUAL, use_subkey = True, cb_data = None, peer_cb = None, credential = None, spn = None):
+async def establish(lab, peer, service = 'aes256', flags = BASE | MUTUAL, use_subkey = True, cb_data = None, peer_cb = None, credential = None, spn = None, etypes = None):
 	if spn is None:
-		spn = 'nfs/%s.test.lab@%s' % (service, lab.realm)
+		spn = 'nfs/%s.%s@%s' % (service, lab.domain, lab.realm)
 	if credential is None:
 		credential = get_credential(lab)
 	ctx = credential.build_gss_context()
 	ctx.use_subkey = use_subkey
+	if etypes is not None:
+		ctx.etypes = etypes
 	token, to_continue, err = await ctx.authenticate(None, flags = flags, spn = spn, cb_data = cb_data)
 	if err is not None:
 		raise err

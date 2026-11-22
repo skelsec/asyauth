@@ -6,7 +6,8 @@
 # meant for peers using MIT krb5 or Heimdal, eg. RPCSEC_GSS (NFS).
 #
 # https://datatracker.ietf.org/doc/html/rfc4121  (AES, "CFX" tokens)
-# https://datatracker.ietf.org/doc/html/rfc1964  (token framing for the old token types)
+# https://datatracker.ietf.org/doc/html/rfc1964  (DES, and the token framing for the old token types)
+# https://datatracker.ietf.org/doc/html/draft-raeburn-krb5-gssapi-krb5-3des-01  (3DES)
 # https://datatracker.ietf.org/doc/html/rfc4757  (RC4-HMAC)
 
 import enum
@@ -17,7 +18,7 @@ from asn1crypto.core import ObjectIdentifier
 from minikerberos.protocol import encryption
 from unicrypto import hmac
 from unicrypto.hashlib import md5
-from unicrypto.symmetric import RC4
+from unicrypto.symmetric import RC4, DES, TDES, MODE_CBC
 
 
 GSS_KRB5_MECH_OID = '1.2.840.113554.1.2.2'
@@ -340,6 +341,122 @@ class GSSAPI_RFC4757:
 		except Exception as e:
 			return None, None, None, e
 
+class GSSAPI_RFC1964:
+	"""
+	RFC1964 per-message tokens for the single DES enctypes (DES MAC MD5 checksum,
+	DES seal) and their 3DES version for des3-cbc-sha1 (HMAC SHA1 DES3 KD
+	checksum, DES3 seal).
+
+	key: the context key. This is the initiator's subkey if the authenticator
+		had one, otherwise the ticket session key.
+	"""
+	def __init__(self, key, is_initiator = True):
+		self.key = key
+		self.is_initiator = is_initiator
+		self.send_direction = b'\x00' * 4 if is_initiator is True else b'\xFF' * 4
+		self.recv_direction = b'\xFF' * 4 if is_initiator is True else b'\x00' * 4
+		if key.enctype == encryption.Enctype.DES3:
+			self.sgn_alg = b'\x04\x00'
+			self.seal_alg = b'\x02\x00'
+			self.cksum_len = 20
+			self.cipher = TDES
+			self.seal_key = key.contents
+		else:
+			self.sgn_alg = b'\x00\x00'
+			self.seal_alg = b'\x00\x00'
+			self.cksum_len = 8
+			self.cipher = DES
+			self.seal_key = bytes([b ^ 0xF0 for b in key.contents])
+
+	def get_checksum(self, data):
+		if self.cipher is TDES:
+			return encryption._SHA1DES3.checksum(self.key, KG_USAGE.ACCEPTOR_SIGN.value, data)
+		# DES MAC MD5 is the last block of the encrypted MD5 hash
+		return self.cipher(self.key.contents, MODE_CBC, b'\x00' * 8).encrypt(md5(data).digest())[8:]
+
+	def encrypt_seq(self, seq_num, cksum):
+		snd_seq = (seq_num & 0xFFFFFFFF).to_bytes(4, 'little', signed = False) + self.send_direction
+		return self.cipher(self.key.contents, MODE_CBC, cksum[:8]).encrypt(snd_seq)
+
+	def decrypt_seq(self, snd_seq, cksum):
+		snd_seq = self.cipher(self.key.contents, MODE_CBC, cksum[:8]).decrypt(snd_seq)
+		if snd_seq[4:] != self.recv_direction:
+			raise Exception('Token direction mismatch (reflected token?)')
+		return int.from_bytes(snd_seq[:4], 'little', signed = False)
+
+	def GSS_GetMIC(self, data:bytes, seq_num:int):
+		"""Returns the MIC token for data"""
+		try:
+			hdr = TOK_ID_MIC_V1 + self.sgn_alg + b'\xFF' * 4
+			cksum = self.get_checksum(hdr + data)
+			return gss_frame(hdr + self.encrypt_seq(seq_num, cksum) + cksum), None
+		except Exception as e:
+			return None, e
+
+	def GSS_VerifyMIC(self, data:bytes, token:bytes):
+		"""Verifies a MIC token created by the peer. Returns the sequence number of the token"""
+		try:
+			token = gss_unframe(token)
+			if len(token) != 16 + self.cksum_len:
+				raise Exception('Incorrect MIC token length')
+			hdr = token[:8]
+			if hdr != TOK_ID_MIC_V1 + self.sgn_alg + b'\xFF' * 4:
+				raise Exception('Not a MIC token of this enctype')
+			cksum = token[16:]
+			if encryption._mac_equal(cksum, self.get_checksum(hdr + data)) is False:
+				raise Exception('MIC token checksum verification failure')
+			return self.decrypt_seq(token[8:16], cksum), None
+		except Exception as e:
+			return None, e
+
+	def GSS_Wrap(self, data:bytes, seq_num:int, confidential:bool = True):
+		"""Returns the Wrap token carrying data"""
+		try:
+			seal_alg = self.seal_alg if confidential is True else b'\xFF\xFF'
+			hdr = TOK_ID_WRAP_V1 + self.sgn_alg + seal_alg + b'\xFF' * 2
+			pad = 8 - (len(data) % 8)
+			body = os.urandom(8) + data + bytes([pad]) * pad
+			cksum = self.get_checksum(hdr + body)
+			if confidential is True:
+				body = self.cipher(self.seal_key, MODE_CBC, b'\x00' * 8).encrypt(body)
+			return gss_frame(hdr + self.encrypt_seq(seq_num, cksum) + cksum + body), None
+		except Exception as e:
+			return None, e
+
+	def GSS_Unwrap(self, token:bytes):
+		"""
+		Processes a Wrap token created by the peer.
+		Returns the data, wether it was encrypted and the sequence number of the token
+		"""
+		try:
+			token = gss_unframe(token)
+			if len(token) < 16 + self.cksum_len + 16:
+				raise Exception('Wrap token too short')
+			hdr = token[:8]
+			if hdr[:4] != TOK_ID_WRAP_V1 + self.sgn_alg or hdr[6:8] != b'\xFF' * 2:
+				raise Exception('Not a Wrap token of this enctype')
+			if hdr[4:6] == self.seal_alg:
+				confidential = True
+			elif hdr[4:6] == b'\xFF\xFF':
+				confidential = False
+			else:
+				raise Exception('Unsupported SEAL_ALG in Wrap token')
+			cksum = token[16:16 + self.cksum_len]
+			body = token[16 + self.cksum_len:]
+			if len(body) % 8 != 0:
+				raise Exception('Incorrect Wrap token length')
+			seq_num = self.decrypt_seq(token[8:16], cksum)
+			if confidential is True:
+				body = self.cipher(self.seal_key, MODE_CBC, b'\x00' * 8).decrypt(body)
+			if encryption._mac_equal(cksum, self.get_checksum(hdr + body)) is False:
+				raise Exception('Wrap token checksum verification failure')
+			pad = body[-1]
+			if pad < 1 or pad > 8 or pad > len(body) - 8:
+				raise Exception('Incorrect padding in Wrap token')
+			return body[8:len(body) - pad], confidential, seq_num, None
+		except Exception as e:
+			return None, None, None, e
+
 def get_gssapi_rfc(key, is_initiator = True, acceptor_subkey = False):
 	if key.enctype == encryption.Enctype.AES256:
 		return GSSAPI_RFC4121(key, encryption._AES256CTS, encryption._SHA1AES256, is_initiator = is_initiator, acceptor_subkey = acceptor_subkey)
@@ -347,5 +464,7 @@ def get_gssapi_rfc(key, is_initiator = True, acceptor_subkey = False):
 		return GSSAPI_RFC4121(key, encryption._AES128CTS, encryption._SHA1AES128, is_initiator = is_initiator, acceptor_subkey = acceptor_subkey)
 	elif key.enctype == encryption.Enctype.RC4:
 		return GSSAPI_RFC4757(key, is_initiator = is_initiator)
+	elif key.enctype in (encryption.Enctype.DES3, encryption.Enctype.DES_MD5, encryption.Enctype.DES_MD4, encryption.Enctype.DES_CRC):
+		return GSSAPI_RFC1964(key, is_initiator = is_initiator)
 	else:
 		raise Exception('Unsupported etype %s' % key.enctype)

@@ -13,15 +13,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # MIT krb5 lab, see tests/lab/README.md
 LAB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lab')
-LAB_IMAGE = 'asyauth-krb5lab'
 LAB_USER = 'alice'
 LAB_PASSWORD = 'Passw0rd!'
-# realm -> (container, cross-realm krbtgt principals)
+# realm -> (container, image, dockerfile, cross-realm krbtgt principals)
 # TEST.LAB is trusted by OTHER.LAB which is trusted by THIRD.LAB
+# LEGACY.LAB has an old MIT krb5 for the DES and 3DES services
 LAB_REALMS = {
-	'TEST.LAB' : ('asyauth-krb5lab', 'krbtgt/OTHER.LAB@TEST.LAB'),
-	'OTHER.LAB' : ('asyauth-krb5lab-other', 'krbtgt/OTHER.LAB@TEST.LAB krbtgt/THIRD.LAB@OTHER.LAB'),
-	'THIRD.LAB' : ('asyauth-krb5lab-third', 'krbtgt/THIRD.LAB@OTHER.LAB'),
+	'TEST.LAB' : ('asyauth-krb5lab', 'asyauth-krb5lab', 'Dockerfile', 'krbtgt/OTHER.LAB@TEST.LAB'),
+	'OTHER.LAB' : ('asyauth-krb5lab-other', 'asyauth-krb5lab', 'Dockerfile', 'krbtgt/OTHER.LAB@TEST.LAB krbtgt/THIRD.LAB@OTHER.LAB'),
+	'THIRD.LAB' : ('asyauth-krb5lab-third', 'asyauth-krb5lab', 'Dockerfile', 'krbtgt/THIRD.LAB@OTHER.LAB'),
+	'LEGACY.LAB' : ('asyauth-krb5lab-legacy', 'asyauth-krb5lab-legacy', 'Dockerfile.legacy', ''),
 }
 
 def run(coro):
@@ -35,7 +36,7 @@ class KRB5Lab:
 	def __init__(self, realm):
 		self.realm = realm
 		self.domain = realm.lower()
-		self.container, self.trusts = LAB_REALMS[realm]
+		self.container, self.image, self.dockerfile, self.trusts = LAB_REALMS[realm]
 		self.user = LAB_USER
 		self.password = LAB_PASSWORD
 		self.ip = None
@@ -48,7 +49,8 @@ class KRB5Lab:
 	def start(self):
 		if self.is_running() is False:
 			docker('rm', '-f', self.container, check = False)
-			docker('run', '-d', '--name', self.container, '--hostname', 'kdc.%s' % self.domain, '-e', 'LAB_REALM=%s' % self.realm, '-e', 'LAB_TRUSTS=%s' % self.trusts, LAB_IMAGE)
+			docker('build', '-q', '-t', self.image, '-f', os.path.join(LAB_DIR, self.dockerfile), LAB_DIR)
+			docker('run', '-d', '--name', self.container, '--hostname', 'kdc.%s' % self.domain, '-e', 'LAB_REALM=%s' % self.realm, '-e', 'LAB_TRUSTS=%s' % self.trusts, self.image)
 			self.started = True
 
 	def wait(self):
@@ -108,8 +110,6 @@ def start_labs(realms):
 	if shutil.which('docker') is None or docker('info', check = False).returncode != 0:
 		pytest.skip('docker is not available')
 	labs = [KRB5Lab(realm) for realm in realms]
-	if any(lab.is_running() is False for lab in labs):
-		docker('build', '-q', '-t', LAB_IMAGE, LAB_DIR)
 	for lab in labs:
 		lab.start()
 	for lab in labs:
@@ -129,6 +129,13 @@ def xlabs(lab):
 	yield {x.realm : x for x in [lab] + labs}
 	for x in labs:
 		x.stop()
+
+@pytest.fixture(scope = 'session')
+def legacy():
+	"""Realm with MIT krb5 1.17 which still does single DES"""
+	labs = start_labs(['LEGACY.LAB'])
+	yield labs[0]
+	labs[0].stop()
 
 @pytest.fixture
 def peer(lab):
