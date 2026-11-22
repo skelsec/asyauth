@@ -173,3 +173,11 @@ class KerberosCredential(UniCredential):
 		else:
 			raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
 
+	def build_gss_context(self, *args, **kwargs):
+		# RFC4121 kerberos GSSAPI mechanism without SPNEGO and Windows specifics (eg. for RPCSEC_GSS)
+		if self.subprotocol.type == asyauthSubProtocol.NATIVE:
+			from asyauth.protocols.kerberos.client.gssnative import KerberosGSSClientNative
+			return KerberosGSSClientNative(self)
+		else:
+			raise Exception('Unsupported subprotocol "%s"' % self.subprotocol)
+
