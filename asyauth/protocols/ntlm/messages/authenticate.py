@@ -276,14 +276,19 @@ class NTLMAuthenticate:
 			buff.seek(auth.NtChallengeResponseFields.offset, io.SEEK_SET)
 			auth.NTChallenge = NTLMv1Response.from_buffer(buff)
 
+		# String fields are UTF-16LE only when the client negotiated NEGOTIATE_UNICODE;
+		# otherwise they are OEM (single-byte) encoded. Clients that don't request
+		# Unicode (e.g. curl's proxy NTLM) would otherwise break UTF-16 decoding.
+		str_encoding = 'utf-16le' if auth.NegotiateFlags & NegotiateFlags.NEGOTIATE_UNICODE else 'ascii'
+
 		buff.seek(auth.DomainNameFields.offset,io.SEEK_SET)
-		auth.DomainName = buff.read(auth.DomainNameFields.length).decode('utf-16le')
+		auth.DomainName = buff.read(auth.DomainNameFields.length).decode(str_encoding, errors='replace')
 
 		buff.seek(auth.UserNameFields.offset,io.SEEK_SET)
-		auth.UserName = buff.read(auth.UserNameFields.length).decode('utf-16le')
+		auth.UserName = buff.read(auth.UserNameFields.length).decode(str_encoding, errors='replace')
 
 		buff.seek(auth.WorkstationFields.offset,io.SEEK_SET)
-		auth.Workstation = buff.read(auth.WorkstationFields.length).decode('utf-16le')
+		auth.Workstation = buff.read(auth.WorkstationFields.length).decode(str_encoding, errors='replace')
 
 		buff.seek(auth.EncryptedRandomSessionKeyFields.offset,io.SEEK_SET)
 		auth.EncryptedRandomSession = buff.read(auth.EncryptedRandomSessionKeyFields.length)
