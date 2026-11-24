@@ -1,22 +1,21 @@
-
-import traceback
 import asyncio
-import logging
 import copy
+import logging
 import os
+import traceback
+from typing import Callable
 
 from asyauth import logger
-from asyauth.common.credentials.ntlm import NTLMCredential
-from asyauth.protocols.ntlm.structures.serverinfo import NTLMServerInfo
-from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
-from asyauth.protocols.ntlm.messages.negotiate import NTLMNegotiate
-from asyauth.protocols.ntlm.messages.challenge import NTLMChallenge
 from asyauth.protocols.ntlm.messages.authenticate import NTLMAuthenticate
-from asyauth.protocols.ntlm.creds_calc import NTLMCredentials
-from asyauth.protocols.ntlm.structures.avpair import MsvAvFlags, AVPAIRType, AVPair
+from asyauth.protocols.ntlm.messages.challenge import NTLMChallenge
+from asyauth.protocols.ntlm.messages.negotiate import NTLMNegotiate
+from asyauth.protocols.ntlm.structures.avpair import AVPair
+from asyauth.protocols.ntlm.structures.avpair import AVPAIRType
+from asyauth.protocols.ntlm.structures.avpair import MsvAvFlags
 from asyauth.protocols.ntlm.structures.challenge_response import NTLMv2Response
-from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
-from typing import Callable
+from asyauth.protocols.ntlm.structures.negotiate_flags import NegotiateFlags
+from asyauth.protocols.ntlm.structures.serverinfo import NTLMServerInfo
+
 
 async def log_cb_dummy(msg):
 	print(msg)
